@@ -3,15 +3,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, OvertimeRequest, DayConfig, Employee } from '../../../types';
 import { supabase } from '../../lib/supabase';
 import { Card } from '../ui/Card';
-import { rewriteOvertimeReason } from '../../services/geminiService';
 import * as XLSX from 'xlsx';
 import { 
   Clock, Calendar as CalendarIcon, X, 
-  Timer, Loader2, ChevronLeft, ChevronRight, Wand2, Download, BarChart3, Users, User as UserIcon, Settings, Check, Trash2, 
-  TrendingUp, Activity, Zap, ChevronDown, ChevronUp, Home, Briefcase, FileText, CalendarRange, UserCheck, Search, Filter,
-  FileSpreadsheet, FileDown, CalendarDays, Eye, Trophy, Target, Award, Info, Undo2, ArrowRight
+  Timer, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, BarChart3, Users, User as UserIcon, Settings, Check, Trash2, 
+  Activity, Home, Briefcase, FileText, CalendarRange, UserCheck, Search, Filter,
+  FileSpreadsheet, FileDown, CalendarDays, Eye, Trophy, Target, Award, Info, Undo2, ArrowRight, Snowflake, Sparkles, UserPlus, UserRoundPen, ChevronUp
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface OvertimeRegistrationProps {
   user: User;
@@ -37,12 +36,12 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
   const [currentDate, setCurrentDate] = useState(new Date());
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [showColleagueDetails, setShowColleagueDetails] = useState(false);
   const [isConfirmCancelOpen, setIsConfirmCancelOpen] = useState(false); 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRewriting, setIsRewriting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConfigUpdating, setIsConfigUpdating] = useState(false);
+  const [isListExpanded, setIsListExpanded] = useState(false); 
+  const [isListHidden, setIsListHidden] = useState(false); 
   
   const [selectedDateStr, setSelectedDateStr] = useState('');
   const [targetUserId, setTargetUserId] = useState(user.id);
@@ -52,16 +51,21 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
   
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
 
-  // Mặc định khoảng ngày xuất là từ đầu tháng đến hiện tại
   const [exportStartDate, setExportStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [exportEndDate, setExportEndDate] = useState(new Date().toISOString().split('T')[0]);
 
   const isAdmin = user.role === 'admin';
   const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
 
-  const dayRequests = useMemo(() => {
-    return requests.filter(r => r.date === selectedDateStr);
-  }, [requests, selectedDateStr]);
+  const month = new Date().getMonth();
+  const isNoel = month === 11;
+  const isTet = month === 0 || month === 1;
+
+  useEffect(() => {
+    fetchRequests();
+    fetchDayConfigs();
+    if (isAdmin) fetchEmployees();
+  }, [user.id, currentDate]);
 
   const currentSelectedRequest = useMemo(() => {
     if (!selectedDateStr || !targetUserId) return null;
@@ -69,12 +73,6 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
   }, [requests, selectedDateStr, targetUserId]);
 
   const isViewOnly = !isAdmin && targetUserId !== user.id;
-
-  useEffect(() => {
-    fetchRequests();
-    fetchDayConfigs();
-    if (isAdmin) fetchEmployees();
-  }, [user.id, currentDate]);
 
   useEffect(() => {
     if (!selectedDateStr) return;
@@ -87,16 +85,11 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
     } else {
         const dateObj = new Date(selectedDateStr);
         const dayOfWeek = dateObj.getDay(); 
-        
         const defaultIsWorking = dayOfWeek !== 0 && dayOfWeek !== 6;
         const isWorkingDay = dayConfigs[selectedDateStr] ?? defaultIsWorking;
 
         if (isWorkingDay) {
-            if (dayOfWeek === 6) {
-                setStartTime('14:30');
-            } else {
-                setStartTime('17:30');
-            }
+            setStartTime(dayOfWeek === 6 ? '14:30' : '17:30');
             setEndTime('20:00');
         } else {
             setStartTime('08:00');
@@ -155,7 +148,7 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
   const calculateHours = (start: string, end: string, dateStr: string) => {
     if (!dateStr || !start || !end) return 0;
     const s = timeToNumber(start);
-    const e = Math.min(timeToNumber(end), 20.0);
+    const e = Math.min(timeToNumber(end), 22.0);
     const diff = e - s;
     if (diff <= 0) return 0;
     
@@ -171,67 +164,51 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
 
   const calculatedHours = useMemo(() => calculateHours(startTime, endTime, selectedDateStr), [startTime, endTime, selectedDateStr, dayConfigs]);
 
-  const handleExportExcel = (mode: 'personal' | 'all' = 'personal', specificRange?: { start: string, end: string }) => {
-    const start = specificRange ? specificRange.start : exportStartDate;
-    const end = specificRange ? specificRange.end : exportEndDate;
+  const handleExportExcelPro = (mode: 'today' | 'range') => {
+    let filtered = [];
+    const department = "Automation";
 
-    if (!start || !end) return alert("Vui lòng chọn đầy đủ khoảng thời gian.");
+    if (mode === 'today') {
+        filtered = requests.filter(r => r.date === todayStr);
+    } else {
+        filtered = requests.filter(r => r.date >= exportStartDate && r.date <= exportEndDate);
+    }
 
-    let filtered = requests.filter(r => r.date >= start && r.date <= end);
-    if (mode === 'personal') filtered = filtered.filter(r => r.user_id === user.id);
-    
-    if (filtered.length === 0) return alert("Không tìm thấy dữ liệu đăng ký trong khoảng thời gian này.");
+    if (filtered.length === 0) return alert("Không tìm thấy dữ liệu đăng ký.");
 
-    filtered.sort((a, b) => a.date.localeCompare(b.date));
     const workbook = XLSX.utils.book_new();
-    const dayNames = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+    const groupedByDate = filtered.reduce((acc, req) => {
+        if (!acc[req.date]) acc[req.date] = [];
+        acc[req.date].push(req);
+        return acc;
+    }, {} as Record<string, OvertimeRequest[]>);
 
-    const summaryData = filtered.map(req => {
-        const d = new Date(req.date);
-        return {
-            'Ngày': req.date,
-            'Thứ': dayNames[d.getDay()],
-            'Họ và tên': req.users?.name || 'Ẩn danh',
-            'Mã nhân viên': req.users?.employee_id || 'N/A',
-            'Bắt đầu': req.start_time,
-            'Kết thúc': req.end_time,
-            'Tổng giờ': req.total_hours,
-            'Nội dung công việc': req.reason
-        };
-    });
-    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'TỔNG HỢP');
+    Object.keys(groupedByDate).sort().forEach((dateKey) => {
+        const dayRequests = groupedByDate[dateKey];
+        const displayDate = dateKey.split('-').reverse().join('/');
+        const ws_data = [
+            ["ĐĂNG KÝ LÀM THÊM TỰ NGUYỆN HÀNG NGÀY / APPLICATION FOR DAILY OVERTIME VOLUNTARY"],
+            [],
+            [`Bộ phận: ${department}`, ``, ``, ``, ``, ``, ``, `Ngày: ${displayDate}`],
+            [`Tổng số người OT: ${dayRequests.length}`],
+            [],
+            ["STT", "Mã NV", "Họ tên", "Bắt đầu", "Kết thúc", "OT 150%", "OT 200%", "Lý do", "Ký tên", "Ghi chú"]
+        ];
 
-    const groupedByDate: Record<string, OvertimeRequest[]> = {};
-    filtered.forEach(req => {
-        if (!groupedByDate[req.date]) groupedByDate[req.date] = [];
-        groupedByDate[req.date].push(req);
-    });
+        dayRequests.forEach((req, idx) => {
+            const date = new Date(req.date);
+            const isWorking = dayConfigs[req.date] ?? (date.getDay() !== 0 && date.getDay() !== 6);
+            ws_data.push([
+                idx + 1, req.users?.employee_id || "", req.users?.name || "", req.start_time, req.end_time,
+                isWorking ? req.total_hours : "", !isWorking ? req.total_hours : "", req.reason || "", "", ""
+            ]);
+        });
 
-    Object.keys(groupedByDate).forEach(dateKey => {
-        const dayReqs = groupedByDate[dateKey];
-        const dateObj = new Date(dateKey);
-        const dayLabel = dayNames[dateObj.getDay()];
-        const sheetData = dayReqs.map(req => ({
-            'Họ và tên': req.users?.name || 'Ẩn danh',
-            'Mã nhân viên': req.users?.employee_id || 'N/A',
-            'Bắt đầu': req.start_time,
-            'Kết thúc': req.end_time,
-            'Tổng giờ': req.total_hours,
-            'Nội dung công việc': req.reason
-        }));
-        const worksheet = XLSX.utils.json_to_sheet(sheetData);
-        const tabName = dateKey.split('-').reverse().slice(0, 2).join('-');
-        XLSX.utils.book_append_sheet(workbook, worksheet, `${tabName} (${dayLabel})`);
+        const worksheet = XLSX.utils.aoa_to_sheet(ws_data);
+        XLSX.utils.book_append_sheet(workbook, worksheet, dateKey.replace(/-/g, ''));
     });
 
-    const fileNameDate = start === end ? `Ngay_${start}` : `${start}_den_${end}`;
-    XLSX.writeFile(workbook, `Bao_cao_OT_${mode === 'personal' ? 'Ca_nhan' : 'Toan_bo'}_${fileNameDate}.xlsx`);
-  };
-
-  const handleExportToday = (mode: 'personal' | 'all' = 'personal') => {
-      const today = new Date().toISOString().split('T')[0];
-      handleExportExcel(mode, { start: today, end: today });
+    XLSX.writeFile(workbook, `OT_Registration_${mode}.xlsx`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -253,7 +230,8 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
         : await supabase.from('ot_requests').insert([payload]);
       if (res.error) throw res.error;
       await fetchRequests();
-      setIsModalOpen(false);
+      if (!isAdmin) setIsModalOpen(false);
+      else alert("Đã lưu đăng ký thành công!");
     } catch (err: any) {
         alert(err.message);
     } finally {
@@ -269,7 +247,6 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
         if (error) throw error;
         setRequests(prev => prev.filter(r => r.id !== editingRequestId));
         setIsConfirmCancelOpen(false);
-        setIsModalOpen(false);
     } catch (err: any) {
         alert(err.message);
     } finally {
@@ -277,10 +254,9 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
     }
   };
 
-  const handleDateClick = (dateStr: string, dateObj: Date) => {
+  const handleDateClick = (dateStr: string) => {
     setSelectedDateStr(dateStr);
     setTargetUserId(user.id);
-    setShowColleagueDetails(false);
     setIsModalOpen(true);
   };
 
@@ -297,15 +273,9 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
 
   const teamMonthlyStats = useMemo(() => {
     const monthlyApproved = requests.filter(r => r.date.startsWith(currentMonthStr) && r.status === 'approved');
-    const trend = Array.from({length: getDaysInMonth(currentDate.getFullYear(), currentDate.getMonth())}, (_, i) => {
-        const d = i + 1;
-        const dStr = `${currentMonthStr}-${String(d).padStart(2, '0')}`;
-        const dayHours = monthlyApproved.filter(r => r.date === dStr).reduce((sum, r) => sum + Number(r.total_hours || 0), 0);
-        return { day: d, hours: dayHours };
-    });
     const totalHours = monthlyApproved.reduce((sum, r) => sum + Number(r.total_hours || 0), 0);
     const activeMembers = new Set(monthlyApproved.map(r => r.user_id)).size;
-    return { trend, totalHours, activeMembers };
+    return { totalHours, activeMembers };
   }, [requests, currentMonthStr]);
 
   const topRankings = useMemo(() => {
@@ -342,61 +312,45 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
         const myRequest = dayRequestsLocal.find(r => r.user_id === user.id);
         const otherRequests = dayRequestsLocal.filter(r => r.user_id !== user.id);
         const isToday = todayStr === dateStr;
+        const isPast = dateStr < todayStr;
         const dateObj = new Date(year, month, d);
-        
-        const dayOfWeek = dateObj.getDay();
+        const dayOfWeek = dateObj.getDay(); 
         const defaultIsWorking = dayOfWeek !== 0 && dayOfWeek !== 6;
-        const configWork = dayConfigs[dateStr];
-        const isActuallyWorking = configWork ?? defaultIsWorking;
+        const isActuallyWorking = dayConfigs[dateStr] ?? defaultIsWorking;
         
-        const isWeekendDefault = dayOfWeek === 0 || dayOfWeek === 6;
-
-        const shouldShowBadge = !isActuallyWorking || (isActuallyWorking && isWeekendDefault);
-
         days.push(
             <div 
                 key={d} 
-                onClick={() => handleDateClick(dateStr, dateObj)}
-                className={`h-14 md:h-32 border border-gray-100 p-0.5 md:p-2 relative transition-all active:bg-blue-100 lg:hover:bg-blue-50 cursor-pointer group flex flex-col ${isToday ? 'bg-blue-50 ring-inset ring-1 md:ring-2 ring-blue-500/30' : 'bg-white'}`}
+                onClick={() => handleDateClick(dateStr)}
+                className={`h-14 md:h-32 border border-gray-100 p-0.5 md:p-2 relative transition-all active:bg-blue-100 lg:hover:bg-blue-50 cursor-pointer group flex flex-col 
+                  ${isToday ? 'bg-blue-50 ring-inset ring-1 md:ring-2 ring-blue-500/30 z-10' : 'bg-white'} 
+                  ${isPast ? 'opacity-40 grayscale-[0.2]' : 'opacity-100'}`}
             >
                 <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-0.5 md:gap-1.5">
-                        <span className={`text-[9px] md:text-base font-black ${isToday ? 'bg-blue-600 text-white w-3.5 h-3.5 md:w-6 md:h-6 rounded-md md:rounded-lg flex items-center justify-center shadow-lg' : !isActuallyWorking ? 'text-rose-500' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-1 md:gap-1.5 flex-wrap">
+                        <span className={`text-[9px] md:text-base font-black ${isToday ? 'bg-blue-600 text-white w-3.5 h-3.5 md:w-6 md:h-6 rounded-md md:rounded-lg flex items-center justify-center shadow-lg' : 'text-gray-700'}`}>
                             {d}
                         </span>
-                        <div className="flex items-center gap-0.5 md:gap-1">
-                            {shouldShowBadge && (
-                                <span className={`text-[5px] md:text-[8px] font-black px-1 md:px-2 py-0.5 md:py-1 rounded-full shadow-md uppercase border ${!isActuallyWorking ? 'bg-rose-500 text-white border-rose-400' : 'bg-indigo-600 text-white border-indigo-500'}`}>
-                                    {!isActuallyWorking ? 'N' : 'L'}
-                                </span>
-                            )}
-                        </div>
+                        
+                        {(!isActuallyWorking || (isActuallyWorking && (dayOfWeek === 0 || dayOfWeek === 6))) && (
+                            <span className={`text-[6px] md:text-[9px] font-black px-1 py-0.2 md:px-1.5 md:py-0.5 rounded uppercase tracking-tighter shadow-sm border ${isActuallyWorking ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                                {isActuallyWorking ? 'LÀM' : 'NGHỈ'}
+                            </span>
+                        )}
                     </div>
                 </div>
-
                 <div className="flex-1 flex flex-col justify-start gap-0.5 mt-0.5 overflow-hidden">
-                    {myRequest && (
-                        <div className="flex items-center gap-1">
-                            <div className="w-1 h-1 md:w-6 md:h-6 rounded-full md:rounded-lg bg-emerald-500 shadow-sm flex items-center justify-center flex-shrink-0">
-                                <UserIcon className="hidden md:block w-3.5 h-3.5 text-white" />
+                    {myRequest && <div className="w-1.5 h-1.5 md:w-6 md:h-6 rounded-full md:rounded-lg bg-emerald-500 flex items-center justify-center shrink-0 shadow-sm"><UserIcon className="hidden md:block w-3 h-3 text-white" /></div>}
+                    <div className="flex -space-x-1 md:-space-x-2 overflow-hidden">
+                        {otherRequests.slice(0, 3).map((req, idx) => (
+                            <div key={idx} className="w-1.5 h-1.5 md:w-5 md:h-5 rounded-full bg-indigo-100 border border-white flex items-center justify-center shrink-0 shadow-sm">
+                                <span className="hidden md:block text-[7px] font-bold text-indigo-600 uppercase">{req.users?.name?.charAt(0)}</span>
                             </div>
-                        </div>
-                    )}
-                    {otherRequests.length > 0 && (
-                        <div className="flex items-center gap-0.5">
-                             <div className="flex -space-x-1 md:-space-x-2 overflow-hidden">
-                                {otherRequests.slice(0, 3).map((req, idx) => (
-                                    <div key={idx} className="w-1 h-1 md:w-5 md:h-5 rounded-full bg-indigo-200 md:bg-indigo-100 border border-white shadow-sm flex items-center justify-center flex-shrink-0">
-                                        <span className="hidden md:block text-[7px] font-bold text-indigo-600 uppercase">{req.users?.name?.charAt(0)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                        ))}
+                    </div>
                 </div>
-
                 {dayRequestsLocal.length > 0 && (
-                    <div className="absolute bottom-0.5 right-0.5 bg-gray-100 text-gray-500 text-[5px] md:text-[8px] px-0.5 md:px-1.5 py-0.2 md:py-0.5 rounded md:rounded-lg font-black flex items-center gap-0.5 md:gap-1 border border-gray-200">
+                    <div className="absolute bottom-0.5 right-0.5 bg-gray-100 text-gray-500 text-[5px] md:text-[8px] px-1 md:px-1.5 py-0.2 md:py-0.5 rounded md:rounded-lg font-black border border-gray-200">
                         {dayRequestsLocal.length}
                     </div>
                 )}
@@ -406,56 +360,48 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
     return days;
   };
 
+  const dayRequestsInModal = useMemo(() => {
+    return requests.filter(r => r.date === selectedDateStr);
+  }, [requests, selectedDateStr]);
+
+  const displayedDayRequests = useMemo(() => {
+    if (isListExpanded) return dayRequestsInModal;
+    return dayRequestsInModal.slice(0, 4); 
+  }, [dayRequestsInModal, isListExpanded]);
+
   return (
     <div className="space-y-3 md:space-y-6 h-full flex flex-col animate-fade-in max-w-7xl mx-auto px-1 md:px-0 pb-20">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 md:gap-4 bg-white p-3 md:p-6 rounded-[1.2rem] md:rounded-[2rem] shadow-sm border border-gray-100 transition-all">
-            <div className="w-full md:w-auto flex items-center justify-between md:block">
-                <div>
-                    <div className="flex items-center gap-2">
-                        <h2 className="text-base md:text-2xl font-black text-gray-900 tracking-tight">Tăng ca</h2>
-                        <span className="text-[7px] md:text-[10px] font-bold bg-indigo-100 text-indigo-700 px-1 md:py-0.5 rounded-full uppercase">Tool V2</span>
-                    </div>
-                    <p className="text-[8px] md:text-sm text-gray-500 font-medium italic">Tháng {currentDate.getMonth() + 1} / {currentDate.getFullYear()}</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 md:p-6 rounded-[1.2rem] md:rounded-[2rem] shadow-sm border border-gray-100 transition-all">
+            <div>
+                <div className="flex items-center gap-2">
+                    <h2 className="text-base md:text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                      Quản lý Tăng ca 
+                      {isNoel && <Snowflake className="w-5 h-5 text-blue-300 animate-spin-slow" />}
+                      {isTet && <Sparkles className="w-5 h-5 text-yellow-400" />}
+                    </h2>
+                    <span className="text-[7px] md:text-[10px] font-black bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full uppercase tracking-widest">MẪU PRO 2024</span>
                 </div>
-                <button 
-                  onClick={() => handleExportToday(isAdmin ? 'all' : 'personal')}
-                  className="md:hidden flex items-center gap-1 bg-emerald-600 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase shadow-lg shadow-emerald-100 active:scale-95"
-                >
-                  <Zap className="w-2.5 h-2.5" /> Xuất hnay
-                </button>
+                <p className="text-[8px] md:text-sm text-gray-500 font-medium italic">Hệ thống ghi nhận công tác chuyên nghiệp</p>
             </div>
-
-            <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
-                <div className="flex w-full md:w-auto bg-gray-100/80 p-0.5 rounded-xl md:rounded-2xl border border-gray-200 overflow-x-auto no-scrollbar">
-                    <button onClick={() => setActiveTab('calendar')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 md:px-6 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[9px] md:text-sm font-black transition-all whitespace-nowrap ${activeTab === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
-                        Lịch
+            <div className="flex bg-gray-100/80 p-0.5 rounded-xl md:rounded-2xl border border-gray-200 w-full md:w-auto">
+                {['calendar', 'personal', 'stats'].map(t => (
+                    <button key={t} onClick={() => setActiveTab(t as any)} className={`flex-1 md:flex-none px-4 md:px-8 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[9px] md:text-sm font-black transition-all ${activeTab === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                        {t === 'calendar' ? 'Lịch' : t === 'personal' ? 'Cá nhân' : 'Thống kê'}
                     </button>
-                    <button onClick={() => setActiveTab('personal')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 md:px-6 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[9px] md:text-sm font-black transition-all whitespace-nowrap ${activeTab === 'personal' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500'}`}>
-                        Tôi
-                    </button>
-                    <button onClick={() => setActiveTab('stats')} className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 md:px-6 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[9px] md:text-sm font-black transition-all whitespace-nowrap ${activeTab === 'stats' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}>
-                        Thống kê
-                    </button>
-                </div>
-                <button 
-                  onClick={() => handleExportToday(isAdmin ? 'all' : 'personal')}
-                  className="hidden md:flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase shadow-lg shadow-emerald-100 transition-all transform hover:scale-105 active:scale-95"
-                >
-                  <Zap className="w-4 h-4" /> Xuất Excel hôm nay
-                </button>
+                ))}
             </div>
         </div>
 
         <div className="flex-1">
             {activeTab === 'calendar' && (
                 <Card className="h-full flex flex-col p-0 overflow-hidden border border-gray-100 shadow-lg rounded-[1.2rem] md:rounded-[2.5rem] bg-white">
-                    <div className="flex items-center justify-between p-2 md:p-6 bg-white border-b border-gray-100">
-                        <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()-1, 1))} className="p-1.5 md:p-3 hover:bg-gray-100 rounded-xl transition-all"><ChevronLeft className="w-3.5 h-3.5 md:w-5 md:h-5"/></button>
-                        <h3 className="text-[9px] md:text-lg font-black uppercase tracking-[0.1em] md:tracking-[0.2em] text-gray-800">T{currentDate.getMonth()+1} - {currentDate.getFullYear()}</h3>
-                        <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 1))} className="p-1.5 md:p-3 hover:bg-gray-100 rounded-xl transition-all"><ChevronRight className="w-3.5 h-3.5 md:w-5 md:h-5"/></button>
+                    <div className="flex items-center justify-between p-3 md:p-6 bg-white border-b border-gray-100">
+                        <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()-1, 1))} className="p-2 hover:bg-gray-100 rounded-xl transition-all"><ChevronLeft className="w-5 h-5"/></button>
+                        <h3 className="text-sm md:text-lg font-black uppercase tracking-widest text-gray-800">Tháng {currentDate.getMonth()+1} / {currentDate.getFullYear()}</h3>
+                        <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 1))} className="p-2 hover:bg-gray-100 rounded-xl transition-all"><ChevronRight className="w-5 h-5"/></button>
                     </div>
                     <div className="grid grid-cols-7 bg-gray-50 text-[7px] md:text-[10px] font-black uppercase text-gray-400 border-b border-gray-100">
-                        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((d, i) => <div key={d} className={`py-1.5 md:py-4 text-center ${i >= 5 ? 'text-rose-400' : ''}`}>{d}</div>)}
+                        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((d, i) => <div key={d} className={`py-2 md:py-4 text-center ${i >= 5 ? 'text-rose-400' : ''}`}>{d}</div>)}
                     </div>
                     <div className="grid grid-cols-7 flex-1 auto-rows-fr bg-gray-100 gap-[0.5px]">
                         {renderCalendarDays()}
@@ -464,79 +410,41 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
             )}
 
             {activeTab === 'personal' && (
-                <div className="space-y-3 md:space-y-6 animate-fade-in-up">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
-                        <Card className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white border-none shadow-lg rounded-[1rem] md:rounded-[2rem] p-3 md:p-6">
-                            <h3 className="text-[7px] md:text-[10px] font-black uppercase tracking-widest opacity-80">Tháng {currentDate.getMonth()+1}</h3>
-                            <div className="flex items-end gap-1"><span className="text-xl md:text-5xl font-black">{myStats.total.toFixed(1)}</span><span className="text-[8px] md:text-lg font-bold opacity-70">h</span></div>
+                <div className="space-y-4 md:space-y-6 animate-fade-in-up">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <Card className="bg-gradient-to-br from-indigo-600 to-blue-700 text-white border-none shadow-lg rounded-[1.2rem] p-4 md:p-6">
+                            <h3 className="text-[8px] md:text-[10px] font-black uppercase tracking-widest opacity-80">Tổng giờ T{currentDate.getMonth()+1}</h3>
+                            <div className="flex items-end gap-1"><span className="text-2xl md:text-5xl font-black">{myStats.total.toFixed(1)}</span><span className="text-[10px] md:text-lg font-bold opacity-70">h</span></div>
                         </Card>
-                        <Card className="flex items-center gap-2 md:gap-4 bg-white border-l-4 border-emerald-500 rounded-[1rem] p-2 md:p-5 shadow-sm">
-                            <div><p className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase">Đã đăng ký</p><p className="text-xs md:text-2xl font-black text-gray-900">{myStats.count} d</p></div>
+                        <Card className="bg-white border-l-4 border-emerald-500 rounded-[1.2rem] p-4 shadow-sm flex items-center gap-3">
+                            <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600"><Check className="w-5 h-5"/></div>
+                            <div><p className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase">Đăng ký</p><p className="text-lg md:text-2xl font-black text-gray-900">{myStats.count} d</p></div>
                         </Card>
-                        <Card className="flex items-center gap-2 md:gap-4 bg-white border-l-4 border-amber-500 rounded-[1rem] p-2 md:p-5 shadow-sm">
-                            <div><p className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase">Chờ duyệt</p><p className="text-xs md:text-2xl font-black text-gray-900">{myStats.pending}</p></div>
+                         <Card className="bg-white border-l-4 border-amber-500 rounded-[1.2rem] p-4 shadow-sm flex items-center gap-3">
+                            <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600"><Timer className="w-5 h-5"/></div>
+                            <div><p className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase">Chờ duyệt</p><p className="text-lg md:text-2xl font-black text-gray-900">{myStats.pending}</p></div>
                         </Card>
-                        <Card className="flex items-center gap-2 md:gap-4 bg-white border-l-4 border-indigo-500 rounded-[1rem] p-2 md:p-5 shadow-sm">
-                            <div><p className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase">Trung bình</p><p className="text-xs md:text-2xl font-black text-gray-900">{(myStats.total / (myStats.count || 1)).toFixed(1)}</p></div>
+                        <Card className="bg-white border-l-4 border-indigo-500 rounded-[1.2rem] p-4 shadow-sm flex items-center gap-3">
+                            <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600"><Activity className="w-5 h-5"/></div>
+                            <div><p className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase">Trung bình</p><p className="text-lg md:text-2xl font-black text-gray-900">{(myStats.total / (myStats.count || 1)).toFixed(1)}h</p></div>
                         </Card>
                     </div>
 
-                    {/* NEW EXCEL EXPORT UI */}
-                    <Card className="rounded-[1.2rem] md:rounded-[2.5rem] p-4 md:p-8 shadow-xl border-none bg-white">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl">
-                                <FileSpreadsheet className="w-5 h-5 md:w-6 md:h-6" />
-                            </div>
+                    <Card className="rounded-[1.5rem] md:rounded-[2.5rem] p-5 md:p-8 shadow-md border-none bg-white">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                             <div>
-                                <h3 className="text-sm md:text-lg font-black text-gray-900 uppercase tracking-tight">Xuất Excel theo ngày chọn</h3>
-                                <p className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase tracking-widest">Chọn khoảng thời gian để tải báo cáo cá nhân</p>
+                                <h3 className="text-lg font-black text-gray-900 uppercase tracking-tight">Biểu đồ xu hướng</h3>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Lịch sử đăng ký OT của bạn</p>
                             </div>
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-12 items-end gap-3 md:gap-4 bg-gray-50 p-4 md:p-6 rounded-3xl border border-gray-100">
-                            <div className="md:col-span-4 space-y-1.5">
-                                <label className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><CalendarRange className="w-3 h-3"/> Từ ngày</label>
-                                <input 
-                                    type="date" 
-                                    value={exportStartDate}
-                                    onChange={(e) => setExportStartDate(e.target.value)}
-                                    className="w-full px-4 py-3 bg-white border-2 border-gray-100 rounded-xl text-[11px] md:text-sm font-black outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all"
-                                />
-                            </div>
-                            <div className="md:col-span-1 flex items-center justify-center pb-3">
-                                <ArrowRight className="w-5 h-5 text-gray-300 hidden md:block" />
-                                <div className="h-[2px] w-8 bg-gray-200 md:hidden"></div>
-                            </div>
-                            <div className="md:col-span-4 space-y-1.5">
-                                <label className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><CalendarRange className="w-3 h-3"/> Đến ngày</label>
-                                <input 
-                                    type="date" 
-                                    value={exportEndDate}
-                                    onChange={(e) => setExportEndDate(e.target.value)}
-                                    className="w-full px-4 py-3 bg-white border-2 border-gray-100 rounded-xl text-[11px] md:text-sm font-black outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all"
-                                />
-                            </div>
-                            <div className="md:col-span-3">
-                                <button 
-                                    onClick={() => handleExportExcel('personal')}
-                                    className="w-full flex items-center justify-center gap-3 py-3.5 bg-emerald-600 text-white rounded-xl md:rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 transition-all active:scale-95"
-                                >
-                                    <FileDown className="w-4 h-4" /> Tải báo cáo
-                                </button>
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card className="rounded-[1.2rem] md:rounded-[2.5rem] p-3 md:p-6 shadow-md border-none">
-                        <h3 className="font-black text-gray-800 uppercase text-[9px] md:text-xs tracking-widest mb-4 flex items-center gap-2"><Activity className="w-3.5 h-3.5 text-blue-600" /> Biểu đồ xu hướng</h3>
-                        <div className="h-40 md:h-80 w-full">
+                        <div className="h-48 md:h-80 w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={myStats.trend} margin={{ top: 0, right: 0, left: -35, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 7, fontWeight: 'bold', fill: '#94a3b8'}} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 7, fontWeight: 'bold', fill: '#94a3b8'}} />
-                                    <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{fontSize: '9px', borderRadius: '8px'}} />
-                                    <Bar dataKey="hours" fill="#4f46e5" radius={[1, 1, 0, 0]} barSize={6} />
+                                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 8, fontWeight: 'bold', fill: '#94a3b8'}} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 8, fontWeight: 'bold', fill: '#94a3b8'}} />
+                                    <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{fontSize: '10px', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+                                    <Bar dataKey="hours" fill="#4f46e5" radius={[2, 2, 0, 0]} barSize={8} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -545,248 +453,222 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
             )}
 
             {activeTab === 'stats' && (
-                <div className="space-y-4 md:space-y-10 animate-fade-in-up no-scrollbar">
-                    {isAdmin && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                            <Card className="bg-white border-l-4 border-indigo-600 p-3 md:p-6 flex flex-col gap-0.5 shadow-md">
-                                <p className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase">Nhân sự OT</p>
-                                <p className="text-sm md:text-3xl font-black text-gray-900">{teamMonthlyStats.activeMembers}</p>
-                            </Card>
-                            <Card className="bg-white border-l-4 border-emerald-600 p-3 md:p-6 flex flex-col gap-0.5 shadow-md">
-                                <p className="text-[7px] md:text-[10px] font-black text-gray-400 uppercase">Tổng giờ</p>
-                                <p className="text-sm md:text-3xl font-black text-gray-900">{teamMonthlyStats.totalHours.toFixed(1)}h</p>
-                            </Card>
-                            <Card className="col-span-2 md:col-span-1 bg-indigo-600 text-white p-3 md:p-6 flex flex-col gap-0.5 shadow-lg">
-                                <p className="text-[7px] md:text-[10px] font-black text-white/70 uppercase">Hôm nay</p>
-                                <p className="text-sm md:text-3xl font-black">{todayRegistrations.length}</p>
-                            </Card>
-                        </div>
-                    )}
-
-                    {/* STATS EXCEL EXPORT (FOR ADMIN) */}
-                    {isAdmin && (
-                        <Card className="rounded-[1.2rem] md:rounded-[2.5rem] p-4 md:p-8 shadow-xl border-none bg-white">
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl">
-                                    <Download className="w-5 h-5 md:w-6 md:h-6" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm md:text-lg font-black text-gray-900 uppercase tracking-tight">Xuất Excel hệ thống</h3>
-                                    <p className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase tracking-widest">Tải toàn bộ dữ liệu tăng ca theo thời gian tùy chọn</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-12 items-end gap-3 md:gap-4 bg-gray-50 p-4 md:p-6 rounded-3xl border border-gray-100">
-                                <div className="md:col-span-4 space-y-1.5">
-                                    <label className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Từ ngày</label>
-                                    <input 
-                                        type="date" 
-                                        value={exportStartDate}
-                                        onChange={(e) => setExportStartDate(e.target.value)}
-                                        className="w-full px-4 py-3 bg-white border-2 border-gray-100 rounded-xl text-[11px] md:text-sm font-black outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
-                                    />
-                                </div>
-                                <div className="md:col-span-4 space-y-1.5">
-                                    <label className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Đến ngày</label>
-                                    <input 
-                                        type="date" 
-                                        value={exportEndDate}
-                                        onChange={(e) => setExportEndDate(e.target.value)}
-                                        className="w-full px-4 py-3 bg-white border-2 border-gray-100 rounded-xl text-[11px] md:text-sm font-black outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
-                                    />
-                                </div>
-                                <div className="md:col-span-4">
-                                    <button 
-                                        onClick={() => handleExportExcel('all')}
-                                        className="w-full flex items-center justify-center gap-3 py-3.5 bg-gray-900 text-white rounded-xl md:rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95"
-                                    >
-                                        <FileSpreadsheet className="w-4 h-4" /> Xuất Báo Cáo Tổng
-                                    </button>
-                                </div>
-                            </div>
+                <div className="space-y-6 animate-fade-in-up">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Card className="bg-white border-none p-6 flex items-center gap-4 shadow-sm rounded-[1.5rem]">
+                            <div className="p-4 bg-indigo-100 text-indigo-600 rounded-2xl"><Users className="w-6 h-6"/></div>
+                            <div><p className="text-[10px] font-black text-gray-400 uppercase">Nhân sự OT</p><p className="text-3xl font-black text-gray-900">{teamMonthlyStats.activeMembers}</p></div>
                         </Card>
-                    )}
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <Card className="rounded-[1.2rem] md:rounded-[2rem] p-0 flex flex-col overflow-hidden bg-white shadow-md border-none">
-                            <div className="p-3 md:p-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-                                <h4 className="text-[9px] md:text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5 text-amber-500" /> Đăng ký hôm nay</h4>
-                                <span className="text-[7px] font-black bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-md uppercase">Hnay</span>
-                            </div>
-                            <div className="flex-1 overflow-y-auto max-h-[300px] p-2 space-y-2 no-scrollbar">
-                                {todayRegistrations.length === 0 ? (
-                                    <div className="h-40 flex flex-col items-center justify-center text-gray-300 italic text-[9px]">Trống</div>
-                                ) : (
-                                    todayRegistrations.map((req, idx) => (
-                                        <div key={idx} className="p-2 md:p-4 rounded-xl bg-gray-50/50 border border-gray-100 flex items-center gap-2 md:gap-4 transition-all hover:bg-white hover:shadow-sm">
-                                            <div className="w-7 h-7 md:w-10 md:h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-[10px] md:text-sm uppercase">
-                                                {req.users?.name?.charAt(0)}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h5 className="font-black text-gray-900 text-[10px] md:text-sm truncate">{req.users?.name}</h5>
-                                                <p className="text-[7px] md:text-[10px] font-bold text-gray-400 uppercase">{req.users?.employee_id}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="flex items-center gap-1 text-[7px] md:text-[9px] font-black text-indigo-600">
-                                                    {req.start_time}-{req.end_time}
-                                                </div>
-                                                <span className="text-[10px] md:text-sm font-black text-gray-900">{req.total_hours.toFixed(1)}h</span>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
+                        <Card className="bg-white border-none p-6 flex items-center gap-4 shadow-sm rounded-[1.5rem]">
+                            <div className="p-4 bg-emerald-100 text-emerald-600 rounded-2xl"><Timer className="w-6 h-6"/></div>
+                            <div><p className="text-[10px] font-black text-gray-400 uppercase">Tổng giờ tháng</p><p className="text-3xl font-black text-gray-900">{teamMonthlyStats.totalHours.toFixed(1)}h</p></div>
                         </Card>
-
-                        <Card className="rounded-[1.2rem] md:rounded-[2.5rem] p-0 flex flex-col bg-white shadow-md overflow-hidden border border-gray-100">
-                             <div className="p-3 md:p-6 bg-indigo-700 text-white flex justify-between items-center">
-                                 <h4 className="text-[9px] md:text-sm font-black uppercase tracking-widest flex items-center gap-1.5"><Award className="w-4 h-4 text-amber-400" /> Top 10 T{currentDate.getMonth()+1}</h4>
-                             </div>
-                             <div className="p-2 md:p-4 space-y-1.5 overflow-y-auto max-h-[400px] no-scrollbar">
-                                {topRankings.map((emp, idx) => (
-                                    <div key={idx} className={`p-2.5 md:p-4 rounded-xl border flex items-center gap-3 transition-all ${idx === 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}`}>
-                                        <div className={`w-6 h-6 md:w-8 md:h-8 rounded-lg flex items-center justify-center font-black text-[9px] md:text-sm ${idx === 0 ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                                            {idx + 1}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h5 className="font-black text-gray-900 text-[10px] md:text-sm truncate uppercase">{emp.name}</h5>
-                                            <p className="text-[7px] font-bold text-gray-400 uppercase">{emp.count} d</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className="text-xs md:text-lg font-black text-indigo-600">{emp.hours.toFixed(1)}</span>
-                                            <span className="text-[8px] font-bold text-gray-400 ml-0.5 uppercase">h</span>
-                                        </div>
-                                    </div>
-                                ))}
-                             </div>
+                        <Card className="bg-indigo-600 text-white border-none p-6 flex items-center gap-4 shadow-lg rounded-[1.5rem]">
+                            <div className="p-4 bg-white/20 rounded-2xl"><Target className="w-6 h-6"/></div>
+                            <div><p className="text-[10px] font-black text-white/70 uppercase">Hôm nay</p><p className="text-3xl font-black">{todayRegistrations.length}</p></div>
                         </Card>
                     </div>
+
+                    {/* KHU VỰC XUẤT EXCEL VÀ THỐNG KÊ CHI TIẾT */}
+                    <Card className="rounded-[2rem] p-8 md:p-10 shadow-xl border-none bg-white">
+                        {isAdmin && (
+                            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8 mb-10 border-b border-gray-100 pb-10">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-4 bg-emerald-100 text-emerald-600 rounded-3xl shadow-lg shadow-emerald-50"><FileSpreadsheet className="w-8 h-8"/></div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Xuất biểu mẫu nhân sự (Admin)</h3>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1 italic">Mẫu "Daily Overtime Voluntary" chuẩn quy định</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
+                                    <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-2 border-gray-100 rounded-2xl w-full sm:w-auto">
+                                    <input type="date" value={exportStartDate} onChange={(e) => setExportStartDate(e.target.value)} className="bg-transparent text-[11px] font-black outline-none focus:text-indigo-600 transition-all uppercase"/>
+                                    <span className="text-gray-300 font-black">→</span>
+                                    <input type="date" value={exportEndDate} onChange={(e) => setExportEndDate(e.target.value)} className="bg-transparent text-[11px] font-black outline-none focus:text-indigo-600 transition-all uppercase"/>
+                                    </div>
+                                    <div className="flex gap-2 w-full sm:w-auto">
+                                        <button onClick={() => handleExportExcelPro('range')} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-4 bg-indigo-700 text-white rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest shadow-2xl shadow-indigo-100 active:scale-95 transition-all border-b-4 border-indigo-900"><FileDown className="w-4 h-4"/> Xuất khoảng ngày</button>
+                                        <button onClick={() => handleExportExcelPro('today')} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest shadow-2xl shadow-emerald-100 active:scale-95 transition-all border-b-4 border-emerald-800"><CalendarDays className="w-4 h-4"/> Hôm nay</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            {/* DANH SÁCH HÔM NAY */}
+                            <Card className="rounded-[1.5rem] p-0 flex flex-col overflow-hidden bg-gray-50/50 border-none shadow-sm">
+                                <div className="p-6 bg-white border-b border-gray-100 flex justify-between items-center shadow-sm">
+                                    <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest flex items-center gap-2"><Clock className="w-4 h-4 text-indigo-600" /> Đăng ký hôm nay</h4>
+                                    <span className="text-[10px] font-black bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full uppercase tabular-nums">{todayRegistrations.length}</span>
+                                </div>
+                                <div className="p-4 space-y-3 overflow-y-auto max-h-[350px] no-scrollbar">
+                                    {todayRegistrations.length === 0 ? (
+                                        <div className="h-40 flex flex-col items-center justify-center text-gray-300 italic text-[11px] gap-2">
+                                            <Info className="w-5 h-5"/> Chưa có đăng ký nào
+                                        </div>
+                                    ) : (
+                                        todayRegistrations.map((req, idx) => (
+                                            <div key={idx} className="p-4 rounded-2xl bg-white border-2 border-transparent flex items-center gap-4 transition-all hover:border-indigo-100 hover:shadow-lg group">
+                                                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm uppercase group-hover:rotate-6 transition-transform">{req.users?.name?.charAt(0)}</div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h5 className="font-black text-gray-900 text-sm truncate uppercase tracking-tight italic">{req.users?.name}</h5>
+                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{req.users?.employee_id}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-[10px] font-black text-indigo-600 mb-0.5">{req.start_time}-{req.end_time}</div>
+                                                    <span className="text-sm font-black text-gray-900 tabular-nums">{req.total_hours.toFixed(1)}h</span>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </Card>
+
+                            {/* BẢNG VÀNG CỐNG HIẾN (TOP 5) */}
+                            <Card className="rounded-[1.5rem] p-0 flex flex-col bg-gray-50/50 overflow-hidden border-none shadow-sm">
+                                 <div className="p-6 bg-indigo-700 text-white flex justify-between items-center shadow-lg">
+                                     <h4 className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Award className="w-5 h-5 text-amber-400" /> Bảng vàng cống hiến</h4>
+                                     <p className="text-[9px] font-bold opacity-60 uppercase">Tháng {currentDate.getMonth()+1}</p>
+                                 </div>
+                                 <div className="p-4 space-y-3 overflow-y-auto max-h-[350px] no-scrollbar">
+                                    {topRankings.slice(0, 5).map((emp, idx) => (
+                                        <div key={idx} className={`p-4 rounded-2xl border-2 flex items-center gap-4 transition-all ${idx === 0 ? 'bg-amber-50/50 border-amber-100' : 'bg-white border-transparent hover:border-indigo-100 hover:shadow-lg'}`}>
+                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${idx === 0 ? 'bg-amber-500 text-white' : idx === 1 ? 'bg-slate-300 text-white' : idx === 2 ? 'bg-orange-300 text-white' : 'bg-gray-100 text-gray-400'}`}>{idx + 1}</div>
+                                            <div className="flex-1 min-w-0">
+                                                <h5 className="font-black text-gray-900 text-sm truncate uppercase tracking-tight">{emp.name}</h5>
+                                                <p className="text-[9px] font-bold text-gray-400 uppercase">{emp.count} ngày OT</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-xl font-black text-indigo-600 tabular-nums">{emp.hours.toFixed(1)}</span>
+                                                <span className="text-[10px] font-bold text-gray-400 ml-1 uppercase">h</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                 </div>
+                            </Card>
+                        </div>
+                    </Card>
                 </div>
             )}
         </div>
 
+        {/* POPUP ĐĂNG KÝ: TỐI ƯU NHỎ GỌN HƠN */}
         {isModalOpen && (
-            <div className="fixed inset-0 bg-black/70 z-50 flex items-end md:items-center justify-center backdrop-blur-sm animate-fade-in">
-                <div className="bg-white rounded-t-[1.5rem] md:rounded-[3rem] shadow-2xl w-full max-w-sm animate-slide-up md:animate-zoom-in overflow-hidden max-h-[95vh] flex flex-col">
-                    <div className="bg-indigo-600 p-3 md:p-6 flex justify-between items-center text-white shrink-0 shadow-lg">
+            <div className="fixed inset-0 bg-black/80 z-[100] flex items-end md:items-center justify-center backdrop-blur-md animate-fade-in px-0 md:px-4">
+                <div className="bg-white rounded-t-[1.8rem] md:rounded-[2rem] shadow-2xl w-full max-w-lg animate-slide-up md:animate-zoom-in overflow-hidden max-h-[92vh] flex flex-col border border-white/10">
+                    <div className="bg-indigo-600 p-4 md:p-6 flex justify-between items-center text-white shrink-0 shadow-lg">
                         <div className="flex flex-col">
-                            <div className="flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5 text-indigo-200" /><h3 className="text-sm md:text-xl font-black uppercase tracking-tighter">{selectedDateStr.split('-').reverse().join('/')}</h3></div>
-                            <p className="text-[8px] md:text-xs text-indigo-200 font-bold uppercase mt-0.5">Đăng ký tăng ca</p>
+                            <div className="flex items-center gap-2">
+                              <CalendarDays className="w-5 h-5 text-indigo-200" />
+                              <h3 className="text-base md:text-lg font-black uppercase tracking-tighter italic">{selectedDateStr.split('-').reverse().join('/')}</h3>
+                            </div>
+                            <p className="text-[8px] md:text-[9px] text-indigo-200 font-bold uppercase tracking-widest mt-0.5">Chi tiết đăng ký</p>
                         </div>
-                        <button onClick={() => setIsModalOpen(false)} className="p-1.5 hover:bg-white/20 rounded-xl transition-all"><X className="w-5 h-5"/></button>
+                        <button onClick={() => setIsModalOpen(false)} className="p-2 md:p-2.5 hover:bg-white/20 rounded-xl transition-all active:scale-90"><X className="w-5 h-5 md:w-6 md:h-6"/></button>
                     </div>
                     
-                    <div className="p-4 md:p-8 space-y-4 overflow-y-auto no-scrollbar pb-8">
+                    <div className="p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto no-scrollbar pb-10 bg-gray-50/30 flex-1">
                         {isAdmin && (
-                            <div className="bg-white p-3 md:p-5 rounded-2xl border-2 border-indigo-100 shadow-md space-y-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-1.5 bg-indigo-600 rounded-lg text-white">
-                                        <Settings className="w-3.5 h-3.5" />
+                            <div className="space-y-4 md:space-y-6">
+                                <div className="bg-white p-3 md:p-4 rounded-2xl border border-indigo-50 shadow-sm space-y-3">
+                                    <div className="flex items-center gap-2">
+                                        <Settings className="w-3.5 h-3.5 text-indigo-600" />
+                                        <h4 className="text-[9px] md:text-[10px] font-black text-indigo-900 uppercase tracking-widest">Loại ngày</h4>
                                     </div>
-                                    <h4 className="text-[9px] md:text-[11px] font-black text-indigo-900 uppercase">Cấu hình loại ngày</h4>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button onClick={() => updateDayWorkingStatus(false)} className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 transition-all font-black text-[8px] md:text-[9px] uppercase tracking-widest ${ (dayConfigs[selectedDateStr] === false || (dayConfigs[selectedDateStr] === undefined && (new Date(selectedDateStr).getDay() === 0 || new Date(selectedDateStr).getDay() === 6))) ? 'bg-rose-500 text-white border-rose-400 shadow-sm' : 'bg-white text-gray-400 border-gray-100' }`}>
+                                            <Home className="w-3.5 h-3.5" /> Nghỉ
+                                        </button>
+                                        <button onClick={() => updateDayWorkingStatus(true)} className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 transition-all font-black text-[8px] md:text-[9px] uppercase tracking-widest ${ (dayConfigs[selectedDateStr] === true || (dayConfigs[selectedDateStr] === undefined && new Date(selectedDateStr).getDay() !== 0 && new Date(selectedDateStr).getDay() !== 6)) ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100' }`}>
+                                            <Briefcase className="w-3.5 h-3.5" /> Làm
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button 
-                                        type="button"
-                                        onClick={() => updateDayWorkingStatus(false)}
-                                        className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 transition-all font-black text-[8px] md:text-[10px] uppercase ${ (dayConfigs[selectedDateStr] === false || (dayConfigs[selectedDateStr] === undefined && (new Date(selectedDateStr).getDay() === 0 || new Date(selectedDateStr).getDay() === 6))) ? 'bg-rose-500 text-white border-rose-400' : 'bg-gray-50 text-gray-400 border-gray-100' }`}
-                                    >
-                                        <Home className="w-3 h-3" /> Ngày nghỉ
-                                    </button>
-                                    <button 
-                                        type="button"
-                                        onClick={() => updateDayWorkingStatus(true)}
-                                        className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 transition-all font-black text-[8px] md:text-[10px] uppercase ${ (dayConfigs[selectedDateStr] === true || (dayConfigs[selectedDateStr] === undefined && new Date(selectedDateStr).getDay() !== 0 && new Date(selectedDateStr).getDay() !== 6)) ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-gray-50 text-gray-400 border-gray-100' }`}
-                                    >
-                                        <Briefcase className="w-3 h-3" /> Đi làm
-                                    </button>
-                                </div>
-                            </div>
-                        )}
 
-                        {dayRequests.length > 0 && (
-                            <div className="p-2 md:p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                <button onClick={() => setShowColleagueDetails(!showColleagueDetails)} className="w-full flex justify-between items-center text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    <span className="flex items-center gap-1.5"><Users className="w-3 h-3"/> Đơn trong ngày ({dayRequests.length})</span>
-                                    {showColleagueDetails ? <ChevronUp className="w-3 h-3"/> : <ChevronDown className="w-3 h-3"/>}
-                                </button>
-                                {showColleagueDetails && (
-                                    <div className="mt-2 flex flex-wrap gap-1.5 animate-fade-in no-scrollbar">
-                                        {dayRequests.map(req => (
-                                            <button 
-                                                key={req.id} 
-                                                type="button"
-                                                onClick={() => isAdmin && setTargetUserId(req.user_id)}
-                                                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[8px] md:text-[10px] font-bold transition-all ${isAdmin ? 'bg-white border-indigo-200 text-indigo-600 shadow-sm' : 'bg-gray-50 text-gray-400'}`}
-                                            >
-                                                <span className="truncate max-w-[60px]">{req.users?.name}</span>
-                                                {isAdmin && req.user_id === targetUserId && <Check className="w-2.5 h-2.5" />}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between px-1">
+                                        <div className="flex items-center gap-1.5">
+                                            <Users className="w-3.5 h-3.5 text-indigo-600" />
+                                            <h4 className="text-[9px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest">Đã đăng ký ({dayRequestsInModal.length})</h4>
+                                        </div>
+                                        <div className="flex gap-2">
+                                          <button onClick={() => setIsListHidden(!isListHidden)} className="text-[8px] font-black text-gray-400 bg-white border border-gray-100 px-2 py-1 rounded-lg uppercase transition-all shadow-sm">
+                                            {isListHidden ? 'Hiện' : 'Ẩn'}
+                                          </button>
+                                          <button onClick={() => {setTargetUserId(user.id); setEditingRequestId(null);}} className="text-[8px] font-black text-indigo-600 bg-white border border-indigo-100 px-2 py-1 rounded-lg uppercase transition-all shadow-sm">
+                                            <UserPlus className="w-3 h-3 inline mr-1" /> Mới
+                                          </button>
+                                        </div>
+                                    </div>
+                                    
+                                    {!isListHidden && (
+                                        <div className="relative animate-fade-in">
+                                          <div className={`grid grid-cols-2 gap-2 transition-all overflow-hidden ${isListExpanded ? 'max-h-64' : 'max-h-24'}`}>
+                                              {dayRequestsInModal.length === 0 ? (
+                                                  <div className="col-span-full py-4 text-center text-[9px] font-bold text-gray-300 italic border border-dashed border-gray-100 rounded-xl">Trống</div>
+                                              ) : (
+                                                  displayedDayRequests.map((req) => (
+                                                      <button key={req.id} onClick={() => setTargetUserId(req.user_id)} className={`px-2.5 py-2 rounded-xl border flex items-center gap-2 transition-all text-left ${targetUserId === req.user_id ? 'bg-indigo-600 border-indigo-600 shadow-md text-white' : 'bg-white border-transparent shadow-sm text-gray-700'}`}>
+                                                          <div className={`w-5 h-5 rounded-lg flex items-center justify-center font-black text-[8px] uppercase shrink-0 ${targetUserId === req.user_id ? 'bg-white text-indigo-600' : 'bg-gray-100 text-gray-400'}`}>{req.users?.name?.charAt(0)}</div>
+                                                          <span className="text-[9px] font-black truncate uppercase">{req.users?.name}</span>
+                                                      </button>
+                                                  ))
+                                              )}
+                                          </div>
+                                          {dayRequestsInModal.length > 4 && (
+                                            <button onClick={() => setIsListExpanded(!isListExpanded)} className="w-full mt-2 text-[8px] font-black text-indigo-400 uppercase tracking-widest flex items-center justify-center gap-1">
+                                                {isListExpanded ? <>Thu gọn <ChevronUp className="w-3 h-3"/></> : <>Xem tất cả <ChevronDown className="w-3 h-3"/></>}
                                             </button>
-                                        ))}
-                                    </div>
-                                )}
+                                          )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
-                        <form onSubmit={handleSubmit} className="space-y-3 md:space-y-5">
+                        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
                             {isViewOnly ? (
-                                <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl text-center space-y-3">
-                                    <Eye className="w-6 h-6 text-amber-500 mx-auto" />
-                                    <p className="text-[10px] font-bold text-amber-900 uppercase">Xem đơn của đồng nghiệp</p>
-                                    <div className="grid grid-cols-2 gap-2 text-[9px]">
-                                        <div className="bg-white p-2 rounded-lg border border-amber-100"><p className="text-gray-400 font-black">Giờ</p><p className="font-black">{startTime} - {endTime}</p></div>
-                                        <div className="bg-white p-2 rounded-lg border border-amber-100"><p className="text-gray-400 font-black">Tổng</p><p className="font-black">{calculatedHours}h</p></div>
-                                    </div>
-                                    <button type="button" onClick={() => setTargetUserId(user.id)} className="w-full py-2.5 bg-indigo-600 text-white text-[9px] font-black uppercase rounded-xl">Đăng ký cho tôi</button>
+                                <div className="bg-white border border-indigo-50 p-6 rounded-2xl text-center space-y-3 shadow-md">
+                                    <Eye className="w-8 h-8 text-indigo-200 mx-auto" />
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic leading-relaxed">Đang xem đơn của {allEmployees.find(e => e.id === targetUserId)?.name}</p>
+                                    <button type="button" onClick={() => {setTargetUserId(user.id); setEditingRequestId(null);}} className="w-full py-3 bg-indigo-600 text-white text-[9px] font-black uppercase rounded-xl tracking-widest shadow-lg">TẠO ĐĂNG KÝ CỦA TÔI</button>
                                 </div>
                             ) : (
-                                <>
+                                <div className="bg-white p-4 md:p-5 rounded-2xl border border-indigo-50 shadow-sm space-y-4 relative">
                                     {isAdmin && (
-                                        <div className="space-y-1">
-                                            <label className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nhân sự:</label>
-                                            <div className="relative group">
-                                                <select 
-                                                    required 
-                                                    value={targetUserId} 
-                                                    onChange={(e) => setTargetUserId(e.target.value)} 
-                                                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-[10px] md:text-sm font-black outline-none appearance-none"
-                                                >
-                                                    {allEmployees.map(emp => (<option key={emp.id} value={emp.id}>{emp.name}</option>))}
-                                                </select>
-                                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-3.5 h-3.5 pointer-events-none" />
-                                            </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Nhân sự thực hiện:</label>
+                                            <select required value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} className="w-full px-3 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-[10px] md:text-xs font-black outline-none focus:border-indigo-500 appearance-none cursor-pointer uppercase">
+                                                {allEmployees.map(emp => (<option key={emp.id} value={emp.id}>{emp.name}</option>))}
+                                            </select>
                                         </div>
                                     )}
                                     <div className="grid grid-cols-2 gap-3">
-                                        <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                                            <label className="block text-[7px] md:text-[9px] font-black text-gray-400 uppercase mb-0.5">Bắt đầu</label>
-                                            <input type="time" required value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-transparent border-none p-0 text-sm md:text-lg font-black text-gray-900 focus:ring-0 outline-none"/>
+                                        <div className="space-y-1.5">
+                                            <label className="block text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Bắt đầu:</label>
+                                            <input type="time" required value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-3 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs md:text-sm font-black text-gray-900 outline-none focus:border-indigo-500 shadow-inner"/>
                                         </div>
-                                        <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                                            <label className="block text-[7px] md:text-[9px] font-black text-gray-400 uppercase mb-0.5">Kết thúc</label>
-                                            <input type="time" required value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-transparent border-none p-0 text-sm md:text-lg font-black text-gray-900 focus:ring-0 outline-none"/>
+                                        <div className="space-y-1.5">
+                                            <label className="block text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Kết thúc:</label>
+                                            <input type="time" required value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-3 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs md:text-sm font-black text-gray-900 outline-none focus:border-indigo-500 shadow-inner"/>
                                         </div>
                                     </div>
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center px-1">
-                                            <label className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase">Lý do & Tổng giờ</label>
-                                            <span className="text-[9px] md:text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{calculatedHours}h OT</span>
+                                            <label className="text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest">Lý do / Công việc</label>
+                                            <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 tabular-nums">{calculatedHours.toFixed(1)}h OT</span>
                                         </div>
-                                        <textarea value={reason} onChange={(e) => setReason(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-[11px] md:text-sm h-20 md:h-32 resize-none outline-none font-medium" placeholder="Mô tả công việc (không bắt buộc)..."/>
-                                        <button type="button" onClick={async () => { if(!reason) return; setIsRewriting(true); setReason(await rewriteOvertimeReason(reason)); setIsRewriting(false); }} disabled={isRewriting || !reason} className="w-full mt-0.5 flex items-center justify-center gap-1 py-1.5 text-[8px] md:text-[10px] font-black text-indigo-600 bg-indigo-50 rounded-lg border border-indigo-100 hover:bg-indigo-100 transition-colors">
-                                            {isRewriting ? <Loader2 className="w-3 h-3 animate-spin"/> : <Wand2 className="w-3 h-3"/>}
-                                            Làm đẹp lý do bằng AI
-                                        </button>
+                                        <textarea value={reason} onChange={(e) => setReason(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-[10px] md:text-xs h-20 md:h-24 resize-none outline-none font-bold text-gray-800 shadow-inner focus:border-indigo-500 transition-all" placeholder="Ghi chú công việc..."/>
                                     </div>
                                     <div className="flex gap-2 pt-2">
                                         {(editingRequestId && (isAdmin || targetUserId === user.id)) && (
-                                            <button type="button" onClick={() => setIsConfirmCancelOpen(true)} className="p-2.5 md:p-5 bg-rose-50 text-rose-600 rounded-xl md:rounded-3xl border border-rose-100 active:scale-95 transition-all"><Trash2 className="w-4 h-4"/></button>
+                                            <button type="button" onClick={() => setIsConfirmCancelOpen(true)} className="p-3 bg-rose-50 text-rose-600 rounded-xl border border-rose-100 hover:bg-rose-600 hover:text-white transition-all shadow-sm"><Trash2 className="w-4 h-4"/></button>
                                         )}
-                                        <button type="submit" disabled={isSubmitting || calculatedHours <= 0} className="flex-1 py-2.5 md:py-5 bg-indigo-600 text-white font-black rounded-xl md:rounded-3xl shadow-lg text-[9px] md:text-xs tracking-widest uppercase transition-all active:scale-95 disabled:opacity-50">
-                                            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : editingRequestId ? 'Cập nhật' : 'Đăng ký ngay'}
+                                        <button type="submit" disabled={isSubmitting || calculatedHours <= 0} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl shadow-lg text-[9px] md:text-[10px] tracking-widest uppercase transition-all active:scale-95 disabled:opacity-50">
+                                            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : editingRequestId ? 'CẬP NHẬT' : 'XÁC NHẬN'}
                                         </button>
                                     </div>
-                                </>
+                                </div>
                             )}
                         </form>
                     </div>
@@ -795,14 +677,14 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
         )}
 
         {isConfirmCancelOpen && (
-            <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-6 backdrop-blur-sm animate-fade-in">
-                <div className="bg-white rounded-[1.5rem] shadow-2xl w-full max-w-[280px] overflow-hidden animate-zoom-in p-5 text-center border border-gray-100">
-                    <div className="w-10 h-10 bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3 rounded-xl"><Trash2 className="w-5 h-5"/></div>
-                    <h3 className="text-sm font-black text-gray-900 mb-1 uppercase">Xóa đơn này?</h3>
-                    <p className="text-[9px] text-gray-500 font-bold uppercase opacity-70 mb-5 leading-tight">Hành động này không thể hoàn tác.</p>
-                    <div className="space-y-2">
-                        <button onClick={handleCancelRequest} disabled={isDeleting} className="w-full py-2.5 bg-rose-600 text-white font-black rounded-xl text-[9px] uppercase active:scale-95 shadow-lg shadow-rose-100">Xác nhận xóa</button>
-                        <button onClick={() => setIsConfirmCancelOpen(false)} className="w-full py-2.5 bg-white text-gray-400 font-black rounded-xl border border-gray-200 text-[9px] uppercase active:scale-95">Hủy</button>
+            <div className="fixed inset-0 bg-black/90 z-[120] flex items-center justify-center p-6 backdrop-blur-xl animate-fade-in">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden animate-zoom-in p-6 text-center border border-white/20">
+                    <Trash2 className="w-10 h-10 text-rose-500 mx-auto mb-4" />
+                    <h3 className="text-base font-black text-gray-900 mb-1 uppercase">HỦY ĐĂNG KÝ?</h3>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase mb-6">Hành động này không thể hoàn tác.</p>
+                    <div className="flex flex-col gap-2">
+                        <button onClick={handleCancelRequest} disabled={isDeleting} className="w-full py-3 bg-rose-600 text-white font-black rounded-xl text-[10px] uppercase shadow-lg shadow-rose-200">XÓA VĨNH VIỄN</button>
+                        <button onClick={() => setIsConfirmCancelOpen(false)} className="w-full py-3 bg-white text-gray-400 font-black rounded-xl border border-gray-100 text-[10px] uppercase">QUAY LẠI</button>
                     </div>
                 </div>
             </div>

@@ -11,9 +11,54 @@ import { RequestManager } from './src/components/requests/RequestManager';
 import { HistoryLog } from './src/components/history/HistoryLog';
 import { OvertimeRegistration } from './src/components/overtime/OvertimeRegistration';
 import { generateManagerInsight } from './src/services/geminiService';
-import { Bot, X, Send, Menu } from 'lucide-react';
+import { Bot, X, Send, Menu, Gift } from 'lucide-react';
 import { supabase } from './src/lib/supabase';
 import { User } from './types';
+
+// Seasonal Effects Component
+const SeasonalEffects = () => {
+  const month = new Date().getMonth(); // 0-11
+  const isNoel = month === 11; // December
+  const isTet = month === 0 || month === 1; // Jan or Feb
+
+  useEffect(() => {
+    if (!isNoel && !isTet) return;
+
+    const container = document.createElement('div');
+    container.className = isNoel ? 'snow-container' : 'blossom-container';
+    document.body.appendChild(container);
+
+    const createParticle = () => {
+      const p = document.createElement('div');
+      p.className = isNoel ? 'snowflake' : 'petal';
+      if (isNoel) p.innerText = '❄';
+      
+      const startLeft = Math.random() * 100;
+      const duration = Math.random() * 5 + 5;
+      const size = Math.random() * 10 + 10;
+
+      p.style.left = startLeft + 'vw';
+      p.style.animationDuration = duration + 's';
+      p.style.fontSize = size + 'px';
+      if (isTet) {
+        p.style.width = size + 'px';
+        p.style.height = size + 'px';
+        p.style.backgroundColor = Math.random() > 0.5 ? '#ffb7c5' : '#ffd700'; // Pink or Gold
+      }
+
+      container.appendChild(p);
+      setTimeout(() => p.remove(), duration * 1000);
+    };
+
+    const interval = setInterval(createParticle, 300);
+    return () => {
+      clearInterval(interval);
+      document.body.removeChild(container);
+    };
+  }, [isNoel, isTet]);
+
+  return null;
+};
 
 const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: () => void }> = ({ children, user, onLogout }) => {
   const location = useLocation();
@@ -27,30 +72,27 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
   const [pendingBorrowCount, setPendingBorrowCount] = useState(0);
   const [pendingOTCount, setPendingOTCount] = useState(0);
 
+  // Festive detection
+  const month = new Date().getMonth();
+  const festiveClass = month === 11 ? 'festive-christmas' : (month === 0 || month === 1 ? 'festive-tet' : 'festive-default');
+
   useEffect(() => {
     setCurrentPath(location.pathname);
     setIsSidebarOpen(false);
-  }, [location]);
+    document.body.className = `bg-gray-50 text-gray-900 ${festiveClass}`;
+  }, [location, festiveClass]);
 
   const fetchCounts = useCallback(async () => {
     if (!user) return;
-    
     const isAdmin = user.role === 'admin';
-    
     try {
-      // Truy vấn số lượng đơn mượn đồ đang chờ (pending)
       let borrowQuery = supabase.from('requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
-      if (!isAdmin) {
-        borrowQuery = borrowQuery.eq('user_id', user.id);
-      }
+      if (!isAdmin) borrowQuery = borrowQuery.eq('user_id', user.id);
       const { count: bCount } = await borrowQuery;
       setPendingBorrowCount(bCount || 0);
 
-      // Truy vấn số lượng đơn tăng ca đang chờ (nếu có logic pending)
       let otQuery = supabase.from('ot_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
-      if (!isAdmin) {
-        otQuery = otQuery.eq('user_id', user.id);
-      }
+      if (!isAdmin) otQuery = otQuery.eq('user_id', user.id);
       const { count: oCount } = await otQuery;
       setPendingOTCount(oCount || 0);
     } catch (error) {
@@ -60,14 +102,9 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
 
   useEffect(() => {
     fetchCounts();
-
-    // Lắng nghe sự kiện tùy chỉnh để cập nhật badge ngay lập tức
     const handleRefresh = () => fetchCounts();
     window.addEventListener('refresh-counts', handleRefresh);
-
-    // Polling định kỳ mỗi 15 giây để đảm bảo dữ liệu mới nhất
     const interval = setInterval(fetchCounts, 15000);
-    
     return () => {
       window.removeEventListener('refresh-counts', handleRefresh);
       clearInterval(interval);
@@ -77,16 +114,16 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
   const handleAiAsk = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!aiQuery.trim()) return;
-    
     setAiLoading(true);
-    const context = `User Role: ${user.role}.`;
+    const context = `User Role: ${user.role}. Current Month: ${month + 1}.`;
     const result = await generateManagerInsight(context, aiQuery);
     setAiResponse(result || "Không có phản hồi.");
     setAiLoading(false);
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50 transition-colors">
+      <SeasonalEffects />
       <Sidebar 
         currentPath={currentPath} 
         onNavigate={(path) => window.location.hash = path} 
@@ -116,16 +153,16 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
         {!showAiChat ? (
           <button 
             onClick={() => setShowAiChat(true)}
-            className="w-14 h-14 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full shadow-2xl flex items-center justify-center text-white hover:shadow-xl transition-all transform hover:scale-110 active:scale-95 border-4 border-white"
+            className="w-14 h-14 bg-gradient-to-r from-red-600 to-orange-600 rounded-full shadow-2xl flex items-center justify-center text-white hover:shadow-xl transition-all transform hover:scale-110 active:scale-95 border-4 border-white"
           >
             <Bot className="w-7 h-7" />
           </button>
         ) : (
           <div className="bg-white rounded-2xl shadow-2xl w-[calc(100vw-2rem)] sm:w-96 flex flex-col border border-gray-200 overflow-hidden animate-fade-in-up origin-bottom-right">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 flex justify-between items-center text-white">
+            <div className="bg-gradient-to-r from-red-600 to-orange-600 p-4 flex justify-between items-center text-white">
               <div className="flex items-center gap-2">
                 <Bot className="w-5 h-5" />
-                <span className="font-semibold text-sm">Trợ lý Quản lý</span>
+                <span className="font-semibold text-sm">Trợ lý Lễ hội</span>
               </div>
               <button onClick={() => setShowAiChat(false)} className="hover:bg-white/20 p-1 rounded transition-colors">
                 <X className="w-5 h-5" />
@@ -134,11 +171,11 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
             
             <div className="p-4 h-64 overflow-y-auto bg-gray-50 text-sm">
               {!aiResponse && !aiLoading && (
-                <p className="text-gray-500 text-center mt-20 italic">Hãy hỏi tôi về dữ liệu hệ thống...</p>
+                <p className="text-gray-500 text-center mt-20 italic">Chúc mừng ngày mới! Hãy hỏi tôi về hệ thống...</p>
               )}
               {aiLoading && (
                 <div className="flex items-center justify-center h-full">
-                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
                 </div>
               )}
               {aiResponse && (
@@ -153,13 +190,13 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
                 type="text" 
                 value={aiQuery}
                 onChange={(e) => setAiQuery(e.target.value)}
-                placeholder="Hỏi trợ lý AI..."
-                className="flex-1 px-3 py-2 border rounded-xl focus:outline-none focus:border-blue-500 text-sm shadow-inner"
+                placeholder="Hỏi trợ lý..."
+                className="flex-1 px-3 py-2 border rounded-xl focus:outline-none focus:border-red-500 text-sm shadow-inner"
               />
               <button 
                 type="submit" 
                 disabled={aiLoading}
-                className="bg-blue-600 text-white p-2.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-md"
+                className="bg-red-600 text-white p-2.5 rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors shadow-md"
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -200,8 +237,8 @@ const App: React.FC = () => {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">Đang tải hệ thống...</p>
+          <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-red-700 font-bold text-xs uppercase tracking-widest italic">Đang tải ngày hội...</p>
         </div>
       </div>
     );
