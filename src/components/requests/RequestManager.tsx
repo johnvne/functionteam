@@ -251,12 +251,9 @@ export const RequestManager: React.FC<RequestManagerProps> = ({ user }) => {
               <div 
                 key={req.id} 
                 className={`bg-white rounded-[2.5rem] p-6 lg:p-0 lg:rounded-none lg:grid lg:grid-cols-12 lg:items-center lg:px-10 lg:py-7 lg:border-b lg:border-gray-50 transition-all group relative border-4 border-transparent shadow-xl lg:shadow-none
-                  ${isTet ? 'hover:bg-red-50/80' : 'hover:bg-indigo-50/60'}
-                  hover:shadow-2xl lg:hover:shadow-lg hover:scale-[1.01] lg:hover:scale-[1.002] active:scale-[0.99] lg:active:scale-100 z-0 hover:z-10`}
+                  ${isTet ? 'hover:bg-red-50/60' : 'hover:bg-indigo-50/40'}
+                  hover:shadow-2xl lg:hover:shadow-none hover:scale-[1.01] lg:hover:scale-[1.002] active:scale-[0.99] lg:active:scale-100 z-0 hover:z-10`}
               >
-                {/* Highlight line indicator */}
-                <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-all duration-300 opacity-0 group-hover:opacity-100 scale-y-0 group-hover:scale-y-100 ${isTet ? 'bg-red-600' : 'bg-indigo-600'}`}></div>
-
                 {/* Mobile View: User Info Header */}
                 <div className="lg:hidden flex items-center justify-between mb-6 pb-4 border-b border-gray-50">
                   <div className="flex items-center gap-4">
@@ -273,7 +270,7 @@ export const RequestManager: React.FC<RequestManagerProps> = ({ user }) => {
                 <div className="hidden lg:col-span-3 lg:flex items-center gap-5">
                    <div className={`w-14 h-14 text-white rounded-[1.2rem] flex items-center justify-center font-black text-xl shadow-lg transition-transform group-hover:rotate-3 ${isTet ? 'bg-red-700' : 'bg-indigo-700'}`}>{req.user_name.charAt(0)}</div>
                    <div>
-                     <p className={`font-black text-sm md:text-base uppercase italic text-gray-900 truncate leading-none mb-1.5 transition-colors ${isTet ? 'group-hover:text-red-700' : 'group-hover:text-indigo-700'}`}>{req.user_name}</p>
+                     <p className="font-black text-sm md:text-base uppercase italic text-gray-900 truncate leading-none mb-1.5">{req.user_name}</p>
                      <p className="text-[10px] text-gray-400 font-black tracking-widest uppercase">{req.employee_id}</p>
                    </div>
                 </div>
@@ -283,7 +280,7 @@ export const RequestManager: React.FC<RequestManagerProps> = ({ user }) => {
                   <ToolTableImage toolId={req.tool_id} toolName={req.tool_name} />
                   <div>
                     <p className="lg:hidden text-[10px] font-black text-gray-400 uppercase mb-1">Thiết bị mượn:</p>
-                    <p className={`font-black text-sm md:text-lg uppercase tracking-tighter text-gray-800 leading-tight italic transition-colors ${isTet ? 'group-hover:text-red-700' : 'group-hover:text-indigo-700'}`}>{req.tool_name}</p>
+                    <p className="font-black text-sm md:text-lg uppercase tracking-tighter text-gray-800 leading-tight italic group-hover:text-indigo-700 transition-colors">{req.tool_name}</p>
                   </div>
                 </div>
 

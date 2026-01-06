@@ -21,11 +21,11 @@ interface ThemeContextType {
   theme: ThemeType;
   setTheme: (t: ThemeType) => void;
 }
-export const ThemeContext = createContext<ThemeContextType>({ theme: 'default', setTheme: () => {} });
+export const ThemeContext = createContext<ThemeContextType>({ theme: 'tet', setTheme: () => {} });
 
 const SeasonalEffects = () => {
   const { theme } = useContext(ThemeContext);
-  const [particles, setParticles] = useState<{ id: number; left: number; duration: number; size: number; delay: number; opacity: number; type: 'petal' | 'sparkle' | 'snow' }[]>([]);
+  const [particles, setParticles] = useState<{ id: number; left: number; duration: number; size: number; delay: number; type: 'petal' | 'sparkle' | 'snow' }[]>([]);
 
   useEffect(() => {
     if (theme === 'default') {
@@ -33,15 +33,13 @@ const SeasonalEffects = () => {
       return;
     }
 
-    // Tạo các hạt ban đầu
-    const initialParticles = Array.from({ length: 30 }).map((_, i) => ({
+    const initialParticles = Array.from({ length: 45 }).map((_, i) => ({
       id: Math.random(),
       left: Math.random() * 100,
-      duration: Math.random() * 10 + 8,
-      size: theme === 'noel' ? Math.random() * 15 + 10 : Math.random() * 12 + 10,
-      delay: Math.random() * -20,
-      opacity: Math.random() * 0.5 + 0.3,
-      type: theme === 'noel' ? 'snow' : (Math.random() > 0.4 ? 'petal' : 'sparkle') as any
+      duration: Math.random() * 14 + 10, // Rơi chậm hơn như bông tuyết
+      size: theme === 'noel' ? Math.random() * 10 + 10 : (Math.random() * 14 + 10),
+      delay: Math.random() * -25,
+      type: theme === 'noel' ? 'snow' : (Math.random() > 0.35 ? 'petal' : 'sparkle') as any
     }));
     setParticles(initialParticles);
 
@@ -50,17 +48,16 @@ const SeasonalEffects = () => {
         const newParticle = {
           id: Date.now() + Math.random(),
           left: Math.random() * 100,
-          duration: Math.random() * 10 + 8,
-          size: theme === 'noel' ? Math.random() * 15 + 10 : Math.random() * 12 + 10,
+          duration: Math.random() * 14 + 10,
+          size: theme === 'noel' ? Math.random() * 10 + 10 : (Math.random() * 14 + 10),
           delay: 0,
-          opacity: Math.random() * 0.5 + 0.3,
-          type: theme === 'noel' ? 'snow' : (Math.random() > 0.4 ? 'petal' : 'sparkle') as any
+          type: theme === 'noel' ? 'snow' : (Math.random() > 0.35 ? 'petal' : 'sparkle') as any
         };
         const next = [...prev, newParticle];
-        if (next.length > 50) next.shift(); 
+        if (next.length > 70) next.shift(); 
         return next;
       });
-    }, 1500);
+    }, 900);
 
     return () => clearInterval(interval);
   }, [theme]);
@@ -68,7 +65,7 @@ const SeasonalEffects = () => {
   if (theme === 'default') return null;
 
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 99 }}>
+    <div className={theme === 'noel' ? 'snow-container' : 'blossom-container'}>
       {particles.map(p => (
         <div
           key={p.id}
@@ -77,10 +74,9 @@ const SeasonalEffects = () => {
             left: `${p.left}vw`,
             animationDuration: `${p.duration}s`,
             animationDelay: `${p.delay}s`,
-            opacity: p.opacity,
             fontSize: p.type === 'snow' ? `${p.size}px` : undefined,
-            width: p.type !== 'snow' ? (p.type === 'sparkle' ? `${p.size / 3}px` : `${p.size}px`) : undefined,
-            height: p.type !== 'snow' ? (p.type === 'sparkle' ? `${p.size / 3}px` : `${p.size * 1.2}px`) : undefined,
+            width: p.type !== 'snow' ? (p.type === 'sparkle' ? `${p.size / 4}px` : `${p.size}px`) : undefined,
+            height: p.type !== 'snow' ? (p.type === 'sparkle' ? `${p.size / 4}px` : `${p.size * 1.2}px`) : undefined,
           } as any}
         >
           {p.type === 'snow' ? '❄' : null}
@@ -108,7 +104,7 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
   useEffect(() => {
     setCurrentPath(location.pathname);
     setIsSidebarOpen(false);
-    document.body.className = `${festiveClass}`;
+    document.body.className = `bg-gray-50 text-gray-900 ${festiveClass}`;
   }, [location, festiveClass]);
 
   const fetchCounts = useCallback(async () => {
@@ -133,7 +129,7 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
     fetchCounts();
     const handleRefresh = () => fetchCounts();
     window.addEventListener('refresh-counts', handleRefresh);
-    const interval = setInterval(fetchCounts, 30000);
+    const interval = setInterval(fetchCounts, 15000);
     return () => {
       window.removeEventListener('refresh-counts', handleRefresh);
       clearInterval(interval);
@@ -144,14 +140,14 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
     e.preventDefault();
     if(!aiQuery.trim()) return;
     setAiLoading(true);
-    const context = `User Role: ${user.role}. System: Inventory and Overtime tracking. Current theme: ${theme}.`;
+    const context = `User Role: ${user.role}. Current Theme: ${theme}.`;
     const result = await generateManagerInsight(context, aiQuery);
     setAiResponse(result || "Không có phản hồi.");
     setAiLoading(false);
   };
 
   return (
-    <div className="flex min-h-screen transition-all duration-1000 bg-slate-50 relative">
+    <div className="flex min-h-screen bg-gray-50 transition-colors duration-700 text-[clamp(0.75rem,2vw,1rem)] relative">
       <Sidebar 
         currentPath={currentPath} 
         onNavigate={(path) => window.location.hash = path} 
@@ -165,7 +161,7 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
       
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-md transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
@@ -174,65 +170,64 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
         <Header user={user} onMenuClick={() => setIsSidebarOpen(true)} />
         <main 
           key={location.pathname}
-          className="flex-1 px-4 md:px-8 py-4 md:py-8 overflow-x-hidden page-transition"
+          className="flex-1 p-4 md:p-8 overflow-x-hidden page-transition"
         >
           {children}
         </main>
       </div>
 
-      {/* AI Chat Bot UI Refined */}
       <div className="fixed bottom-6 right-6 z-50">
         {!showAiChat ? (
           <button 
             onClick={() => setShowAiChat(true)}
-            className={`w-14 h-14 rounded-2xl shadow-2xl flex items-center justify-center text-white transition-all transform hover:scale-110 active:scale-95 border-2 border-white/50 ${theme === 'tet' ? 'bg-gradient-to-tr from-red-600 to-amber-500' : 'bg-gradient-to-tr from-indigo-600 to-violet-500'}`}
+            className={`w-14 h-14 md:w-16 md:h-16 rounded-full shadow-2xl flex items-center justify-center text-white hover:shadow-xl transition-all transform hover:scale-110 active:scale-95 border-4 border-white ${theme === 'tet' ? 'bg-gradient-to-r from-red-600 via-red-700 to-orange-800 shadow-red-300' : 'bg-gradient-to-r from-indigo-600 to-blue-700 shadow-blue-200'}`}
           >
-            <Bot className="w-7 h-7" />
+            <Bot className="w-7 h-7 md:w-8 md:h-8" />
           </button>
         ) : (
-          <div className="bg-white/95 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] w-[calc(100vw-2rem)] sm:w-[380px] flex flex-col border border-white overflow-hidden animate-zoom-in origin-bottom-right">
-            <div className={`p-5 flex justify-between items-center text-white ${theme === 'tet' ? 'bg-gradient-to-r from-red-600 to-orange-500' : 'bg-gradient-to-r from-indigo-600 to-violet-600'}`}>
+          <div className="bg-white rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.2)] w-[calc(100vw-2rem)] sm:w-96 flex flex-col border border-white overflow-hidden animate-zoom-in origin-bottom-right">
+            <div className={`p-5 flex justify-between items-center text-white ${theme === 'tet' ? 'bg-gradient-to-r from-red-700 via-red-800 to-orange-900' : 'bg-gradient-to-r from-indigo-700 to-blue-800'}`}>
               <div className="flex items-center gap-3">
-                <div className="p-1.5 bg-white/20 rounded-lg"><Bot className="w-4 h-4" /></div>
-                <span className="font-bold text-xs uppercase tracking-wider">{theme === 'tet' ? 'Trợ lý Tết' : 'Trợ lý AI'}</span>
+                <Bot className="w-5 h-5" />
+                <span className="font-black text-xs uppercase tracking-widest">{theme === 'tet' ? 'Trợ lý Tết Đoàn Viên 🧧' : 'Trợ lý AI Chiến lược'}</span>
               </div>
-              <button onClick={() => setShowAiChat(false)} className="hover:bg-white/20 p-1.5 rounded-lg transition-colors">
-                <X className="w-4 h-4" />
+              <button onClick={() => setShowAiChat(false)} className="hover:bg-white/20 p-2 rounded-xl transition-colors">
+                <X className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="p-6 h-80 md:h-[400px] overflow-y-auto bg-slate-50/50 leading-relaxed no-scrollbar">
+            <div className="p-6 h-64 md:h-80 overflow-y-auto bg-slate-50 text-xs md:text-sm leading-relaxed no-scrollbar">
               {!aiResponse && !aiLoading && (
-                <div className="flex flex-col items-center justify-center h-full text-slate-300 gap-4 opacity-70">
-                   <div className="p-5 bg-white rounded-full shadow-sm"><Sparkles className="w-8 h-8 text-indigo-400" /></div>
-                   <p className="text-center font-bold text-[10px] uppercase tracking-widest max-w-[200px]">Tôi có thể giúp gì cho bạn hôm nay?</p>
+                <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-4 opacity-70">
+                   <div className="p-4 bg-white rounded-full shadow-sm"><Sparkles className="w-8 h-8 text-amber-400" /></div>
+                   <p className="text-center italic font-bold max-w-[200px]">Tôi có thể phân tích dữ liệu kho và nhân sự cho bạn!</p>
                 </div>
               )}
               {aiLoading && (
                 <div className="flex flex-col items-center justify-center h-full gap-4">
-                   <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-                   <span className="text-[10px] font-black uppercase text-slate-400 animate-pulse">Đang suy nghĩ...</span>
+                   <div className={`animate-spin rounded-full h-12 w-12 border-b-4 border-t-transparent ${theme === 'tet' ? 'border-red-600' : 'border-indigo-600'}`}></div>
+                   <span className="text-[10px] font-black uppercase text-gray-400 animate-pulse tracking-widest">Đang tính toán dữ liệu...</span>
                 </div>
               )}
               {aiResponse && (
-                <div className="prose prose-xs max-w-none text-slate-700 whitespace-pre-line font-medium bg-white p-5 rounded-2xl shadow-sm border border-slate-100 animate-zoom-in">
+                <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-line font-medium bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
                   {aiResponse}
                 </div>
               )}
             </div>
 
-            <form onSubmit={handleAiAsk} className="p-5 border-t border-slate-100 bg-white flex gap-2">
+            <form onSubmit={handleAiAsk} className="p-4 border-t bg-white flex gap-2">
               <input 
                 type="text" 
                 value={aiQuery}
                 onChange={(e) => setAiQuery(e.target.value)}
-                placeholder="Tra cứu nhanh..."
-                className="flex-1 px-5 py-3.5 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-xs font-bold outline-none"
+                placeholder="Tra cứu kho, OT, nhân sự..."
+                className="flex-1 px-5 py-3.5 bg-gray-50 border-none rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 text-xs md:text-sm font-bold shadow-inner"
               />
               <button 
                 type="submit" 
                 disabled={aiLoading}
-                className={`p-3.5 rounded-xl text-white transition-all shadow-lg active:scale-90 ${theme === 'tet' ? 'bg-red-600' : 'bg-indigo-600'}`}
+                className={`${theme === 'tet' ? 'bg-red-700' : 'bg-indigo-700'} text-white p-3.5 md:p-4 rounded-2xl hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-black/5 active:scale-90`}
               >
                 <Send className="w-5 h-5" />
               </button>
@@ -247,7 +242,7 @@ const MainLayout: React.FC<{ children: React.ReactNode; user: User; onLogout: ()
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState<ThemeType>('default');
+  const [theme, setTheme] = useState<ThemeType>('tet'); // Mặc định theme Tết
 
   useEffect(() => {
     const checkUser = async () => {
@@ -272,10 +267,18 @@ const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div className="h-screen flex items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-6">
-          <div className="w-16 h-16 border-4 border-indigo-600/10 border-t-indigo-600 rounded-full animate-spin"></div>
-          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] animate-pulse">Hệ thống đang sẵn sàng</p>
+          <div className="relative">
+            <div className="w-20 h-20 border-[6px] border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Sparkles className="w-8 h-8 text-indigo-600 animate-pulse" />
+            </div>
+          </div>
+          <div className="text-center">
+            <h1 className="text-indigo-900 font-black text-2xl uppercase tracking-[0.2em] italic">Team V1</h1>
+            <p className="text-gray-400 text-[10px] font-bold uppercase mt-2 animate-pulse tracking-widest">Initializing Smart Infrastructure...</p>
+          </div>
         </div>
       </div>
     );

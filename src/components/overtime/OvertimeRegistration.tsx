@@ -8,7 +8,7 @@ import {
   Clock, Calendar as CalendarIcon, X, 
   Timer, Loader2, ChevronLeft, ChevronRight, ChevronDown, Download, BarChart3, Users, User as UserIcon, Settings, Check, Trash2, 
   Activity, Home, Briefcase, FileText, CalendarRange, UserCheck, Search, Filter,
-  FileSpreadsheet, FileDown, CalendarDays, Eye, Trophy, Target, Award, Info, Undo2, ArrowRight, Snowflake, Sparkles, UserPlus, UserRoundPen, ChevronUp, Gift, Send, Save, Edit
+  FileSpreadsheet, FileDown, CalendarDays, Eye, Trophy, Target, Award, Info, Undo2, ArrowRight, Snowflake, Sparkles, UserPlus, UserRoundPen, ChevronUp, Gift, Send, Save
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ThemeContext } from '../../../App';
@@ -66,11 +66,14 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
     if (isAdmin) fetchEmployees();
   }, [user.id, currentDate]);
 
+  // Tìm yêu cầu hiện tại của user mục tiêu trên ngày được chọn
   const currentSelectedRequest = useMemo(() => {
     if (!selectedDateStr || !targetUserId) return null;
     return requests.find(r => r.date === selectedDateStr && r.user_id === targetUserId) || null;
   }, [requests, selectedDateStr, targetUserId]);
 
+  // Danh sách các yêu cầu trong ngày (Dùng để hiển thị danh sách bên trên form)
+  // Sửa lỗi: Lọc duy nhất theo user_id để tránh một người hiện 2 lần nếu DB có lỗi
   const dayRequestsInModal = useMemo(() => {
     const dayReqs = requests.filter(r => r.date === selectedDateStr);
     const uniqueReqs: OvertimeRequest[] = [];
@@ -85,15 +88,18 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
     return uniqueReqs;
   }, [requests, selectedDateStr]);
 
+  // Tự động điền form khi thay đổi ngày hoặc nhân viên được chọn
   useEffect(() => {
     if (!selectedDateStr) return;
     
     if (currentSelectedRequest) {
+        // Nếu đã có đăng ký, chuyển sang chế độ EDIT
         setStartTime(currentSelectedRequest.start_time);
         setEndTime(currentSelectedRequest.end_time);
         setReason(currentSelectedRequest.reason || '');
         setEditingRequestId(currentSelectedRequest.id);
     } else {
+        // Nếu chưa có, thiết lập mặc định dựa trên cấu hình ngày
         const dateObj = new Date(selectedDateStr);
         const dayOfWeek = dateObj.getDay(); 
         const defaultIsWorking = dayOfWeek !== 0 && dayOfWeek !== 6;
@@ -180,7 +186,9 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
     if (calculatedHours <= 0) return alert("Giờ làm không hợp lệ.");
     
     setIsSubmitting(true);
+
     try {
+      // Kiểm tra lần cuối trước khi submit để tránh duplicate nếu 2 người cùng thao tác
       const { data: existing } = await supabase
         .from('ot_requests')
         .select('id')
@@ -243,7 +251,14 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
 
     const workbook = XLSX.utils.book_new();
     const wscols = [
-      {wch: 6},  {wch: 15}, {wch: 25}, {wch: 12}, {wch: 12}, {wch: 12}, {wch: 40}, {wch: 15}
+      {wch: 6},  // STT
+      {wch: 15}, // Mã NV
+      {wch: 25}, // Họ tên
+      {wch: 12}, // Bắt đầu
+      {wch: 12}, // Kết thúc
+      {wch: 12}, // Tổng giờ
+      {wch: 40}, // Lý do
+      {wch: 15}  // Trạng thái
     ];
 
     const groupedByDate: Record<string, OvertimeRequest[]> = {};
@@ -255,6 +270,7 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
     const sortedDates = Object.keys(groupedByDate).sort();
 
     sortedDates.forEach(date => {
+        // Sắp xếp và đảm bảo không trùng user trong file xuất (nếu DB có lỗi)
         const userMap = new Map();
         groupedByDate[date].forEach(r => userMap.set(r.user_id, r));
         
@@ -300,6 +316,7 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
 
   const teamMonthlyStats = useMemo(() => {
     const monthlyApproved = requests.filter(r => r.date.startsWith(currentMonthStr) && r.status === 'approved');
+    // Đảm bảo đếm số người duy nhất
     const uniqueUserIds = new Set(monthlyApproved.map(r => r.user_id));
     const totalHours = monthlyApproved.reduce((sum, r) => sum + Number(r.total_hours || 0), 0);
     return { totalHours, activeMembers: uniqueUserIds.size };
@@ -319,6 +336,7 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
 
   const targetedRegistrations = useMemo(() => {
     const dayReqs = requests.filter(r => r.date === statsViewDate);
+    // Loại bỏ trùng lặp nếu có
     const uniqueMap = new Map();
     dayReqs.forEach(r => uniqueMap.set(r.user_id, r));
     return Array.from(uniqueMap.values()).sort((a, b) => a.start_time.localeCompare(b.start_time));
@@ -333,14 +351,17 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
     const totalDays = getDaysInMonth(year, month);
 
     for (let i = 0; i < startOffset; i++) {
-        days.push(<div key={`empty-${i}`} className="h-20 md:h-32 bg-slate-50/20 border border-slate-100/30"></div>);
+        days.push(<div key={`empty-${i}`} className="h-20 md:h-32 bg-gray-50/50 border border-gray-100/50 opacity-40"></div>);
     }
 
     for (let d = 1; d <= totalDays; d++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         const dayRequestsLocal = requests.filter(r => r.date === dateStr);
+        
+        // Loại bỏ trùng lặp để đếm chính xác số người trên lịch
         const uniqueUserIds = new Set(dayRequestsLocal.map(r => r.user_id));
         const myRequest = dayRequestsLocal.find(r => r.user_id === user.id);
+        
         const isToday = todayStr === dateStr;
         const isPast = dateStr < todayStr;
         const dateObj = new Date(year, month, d);
@@ -350,37 +371,37 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
             <div 
                 key={d} 
                 onClick={() => handleDateClick(dateStr)}
-                className={`h-20 md:h-32 border border-slate-100 p-1.5 relative transition-all cursor-pointer group flex flex-col 
-                  ${isToday ? 'bg-indigo-50/40 ring-inset ring-1 ring-indigo-500/30 z-10' : 'bg-white hover:bg-slate-50'} 
-                  ${isPast ? 'opacity-80' : 'opacity-100'}`}
+                className={`h-24 md:h-36 border border-gray-100 p-1 md:p-2 relative transition-all cursor-pointer group flex flex-col 
+                  ${isToday ? 'bg-blue-50/80 ring-inset ring-2 ring-blue-600/40 z-10' : 'bg-white hover:bg-gray-50'} 
+                  ${isPast ? 'opacity-70' : 'opacity-100'}`}
             >
                 <div className="flex justify-between items-start mb-1">
-                    <span className={`text-[10px] md:text-[11px] font-bold ${isToday ? 'bg-indigo-600 text-white w-4 h-4 md:w-5 md:h-5 rounded-md flex items-center justify-center shadow-sm' : 'text-slate-500'}`}>
+                    <span className={`text-[10px] md:text-sm font-black ${isToday ? 'bg-blue-600 text-white w-5 h-5 md:w-8 md:h-8 rounded-lg flex items-center justify-center shadow-lg' : 'text-gray-900'}`}>
                         {d}
                     </span>
                     {!isActuallyWorking && (
-                      <span className="text-[7px] font-black px-1 py-0.5 rounded bg-rose-50 text-rose-500 uppercase">Nghỉ</span>
+                      <span className="text-[6px] md:text-[8px] font-black px-1.5 py-0.5 rounded uppercase bg-rose-600 text-white shadow-sm">NGHỈ</span>
                     )}
                 </div>
                 
-                <div className="flex-1 flex flex-col justify-start gap-1 overflow-hidden mt-0.5">
+                <div className="flex-1 flex flex-col justify-start gap-1 md:gap-1.5 overflow-hidden">
                     {myRequest && (
-                      <div className={`w-fit flex items-center gap-1 text-white px-1.5 py-0.5 rounded-md shrink-0 border border-white/10 ${isTet ? 'bg-red-600' : 'bg-emerald-600'}`}>
-                        <UserIcon className="w-1.5 h-1.5 md:w-2 md:h-2" />
-                        <span className="text-[7px] font-black truncate uppercase leading-none">{myRequest.total_hours}h</span>
+                      <div className="flex items-center gap-1.5 bg-emerald-600 text-white px-2 py-0.5 rounded-full shrink-0 shadow-md border border-white/20">
+                        <UserIcon className="w-2 h-2 md:w-3 md:h-3" />
+                        <span className="text-[7px] md:text-[10px] font-black truncate uppercase">BẠN: {myRequest.total_hours}h</span>
                       </div>
                     )}
-                    <div className="flex flex-wrap gap-0.5 max-h-8 overflow-hidden">
-                      {dayRequestsLocal.filter(r => r.user_id !== user.id).slice(0, 4).map((req, idx) => (
-                        <div key={idx} className="w-3.5 h-3.5 md:w-4 md:h-4 rounded-md bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center shrink-0" title={req.users?.name}>
-                           <span className="text-[6px] md:text-[7px] font-black uppercase leading-none">{req.users?.name?.charAt(0)}</span>
+                    <div className="flex flex-wrap gap-1">
+                      {dayRequestsLocal.slice(0, 4).map((req, idx) => (
+                        <div key={idx} className="w-4 h-4 md:w-6 md:h-6 rounded-full bg-indigo-700 text-white border-2 border-white flex items-center justify-center shrink-0 shadow-lg" title={req.users?.name}>
+                           <span className="text-[7px] md:text-[10px] font-black uppercase">{req.users?.name?.charAt(0)}</span>
                         </div>
                       ))}
                     </div>
                 </div>
 
                 {uniqueUserIds.size > 0 && (
-                    <div className="absolute bottom-1 right-1 bg-slate-800 text-white text-[7px] px-1 py-0.5 rounded font-black tracking-tight leading-none opacity-80">
+                    <div className="absolute bottom-1 right-1 bg-gray-900 text-white text-[7px] md:text-[10px] px-2 py-0.5 rounded-full font-black border border-white/10 shadow-xl">
                         {uniqueUserIds.size} NV
                     </div>
                 )}
@@ -391,92 +412,72 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
   };
 
   return (
-    <div className="space-y-6 h-full flex flex-col animate-fade-in max-w-[1200px] mx-auto w-full px-4 md:px-0 pb-20">
-        {/* HEADER */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 glass-card p-5 md:p-6 rounded-[1.5rem] vibrant-shadow">
-            <div className="flex items-center gap-4">
-                <div className={`p-4 rounded-2xl shadow-lg text-white transform hover:rotate-3 transition-transform ${isTet ? 'bg-red-600' : 'bg-indigo-600'}`}>
-                    <Clock className="w-6 h-6" />
+    <div className="space-y-4 h-full flex flex-col animate-fade-in max-w-[1400px] mx-auto w-full px-2 md:px-0 pb-24">
+        {/* TAB HEADER */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-4 md:p-6 rounded-[1.5rem] md:rounded-[2.5rem] shadow-sm border border-gray-100">
+            <div className="flex items-center gap-3 md:gap-4">
+                <div className={`p-4 rounded-2xl shadow-xl text-white transform hover:rotate-3 transition-transform ${isTet ? 'bg-red-700' : 'bg-indigo-600'}`}>
+                    <Clock className="w-6 h-6 md:w-8 md:h-8" />
                 </div>
                 <div>
-                    <h2 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight leading-none uppercase">
-                        Tăng ca
-                        {isTet && <Sparkles className="inline ml-2 w-5 h-5 text-orange-500 animate-pulse" />}
+                    <h2 className={`text-lg md:text-2xl font-black ${isTet ? 'text-red-900' : 'text-gray-900'} tracking-tight uppercase italic flex items-center gap-2 leading-none`}>
+                        Tăng ca 
+                        {isTet && <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />}
                     </h2>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1.5 flex items-center gap-2">
-                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
-                       Hệ thống quản lý thời gian
-                    </p>
+                    <p className="text-[9px] md:text-xs text-gray-500 font-black uppercase tracking-[0.15em] mt-1">Manager Tool V1</p>
                 </div>
             </div>
-            <div className="flex bg-slate-100/50 p-1 rounded-xl border border-slate-200 w-full lg:w-auto">
+            <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-inner w-full lg:w-auto">
                 {['calendar', 'personal', 'stats'].map(t => (
-                    <button key={t} onClick={() => setActiveTab(t as any)} className={`flex-1 lg:flex-none px-5 py-2 rounded-lg text-[10px] font-bold transition-all uppercase tracking-widest ${activeTab === t ? (isTet ? 'bg-red-600 text-white shadow-md' : 'bg-white text-indigo-700 shadow-sm') : 'text-slate-500 hover:text-slate-900'}`}>
+                    <button key={t} onClick={() => setActiveTab(t as any)} className={`flex-1 lg:flex-none px-4 md:px-10 py-2.5 rounded-lg text-[10px] md:text-xs font-black transition-all uppercase tracking-widest ${activeTab === t ? (isTet ? 'bg-red-700 text-white shadow-lg' : 'bg-white text-indigo-700 shadow-lg') : 'text-gray-600 hover:text-gray-900'}`}>
                         {t === 'calendar' ? 'Lịch' : t === 'personal' ? 'Cá nhân' : 'Thống kê'}
                     </button>
                 ))}
             </div>
         </div>
 
-        <div className="flex-1 min-h-0">
+        {/* TAB CONTENT */}
+        <div className="flex-1">
             {activeTab === 'calendar' && (
-                <div className="rounded-[2rem] overflow-hidden bg-white border border-slate-200 shadow-sm">
-                    <div className="flex items-center justify-between p-5 md:p-6 bg-white border-b border-slate-100">
-                        <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()-1, 1))} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-indigo-600 transition-all"><ChevronLeft className="w-6 h-6"/></button>
-                        <h3 className="text-lg md:text-xl font-extrabold text-slate-900 italic">Tháng {currentDate.getMonth()+1} / {currentDate.getFullYear()}</h3>
-                        <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 1))} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-indigo-600 transition-all"><ChevronRight className="w-6 h-6"/></button>
+                <Card className="h-full flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-[1.5rem] md:rounded-[3rem] bg-white">
+                    <div className="flex items-center justify-between p-4 md:p-8 bg-white border-b border-gray-100">
+                        <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()-1, 1))} className={`p-2.5 hover:bg-gray-100 rounded-xl transition-all ${isTet ? 'text-red-700' : 'text-indigo-700'}`}><ChevronLeft className="w-6 h-6 md:w-8 md:h-8"/></button>
+                        <h3 className={`text-sm md:text-2xl font-black uppercase tracking-[0.1em] ${isTet ? 'text-red-900' : 'text-gray-900'} italic`}>Tháng {currentDate.getMonth()+1} / {currentDate.getFullYear()}</h3>
+                        <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 1))} className={`p-2.5 hover:bg-gray-100 rounded-xl transition-all ${isTet ? 'text-red-700' : 'text-indigo-700'}`}><ChevronRight className="w-6 h-6 md:w-8 md:h-8"/></button>
                     </div>
-                    <div className="grid grid-cols-7 bg-slate-50/50 text-[9px] font-bold uppercase text-slate-400 border-b border-slate-100">
-                        {['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'].map((d, i) => (
-                            <div key={d} className={`py-4 text-center tracking-widest ${i >= 5 ? 'text-rose-500' : ''}`}>{d}</div>
-                        ))}
+                    <div className="grid grid-cols-7 bg-gray-50/50 text-[9px] md:text-xs font-black uppercase text-gray-400 border-b border-gray-100">
+                        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((d, i) => <div key={d} className={`py-4 md:py-6 text-center ${i >= 5 ? 'text-rose-600' : ''}`}>{d}</div>)}
                     </div>
-                    <div className="grid grid-cols-7 auto-rows-fr bg-slate-100 gap-[1px]">
+                    <div className="grid grid-cols-7 flex-1 auto-rows-fr bg-gray-200 gap-[1px]">
                         {renderCalendarDays()}
                     </div>
-                </div>
+                </Card>
             )}
 
             {activeTab === 'personal' && (
-                <div className="space-y-6 animate-page-transition">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                        <div className={`p-6 rounded-[1.5rem] shadow-lg border-none text-white relative overflow-hidden ${isTet ? 'bg-gradient-to-br from-red-600 to-red-800' : 'bg-gradient-to-br from-indigo-600 to-purple-800'}`}>
-                            <h3 className="text-[10px] font-bold uppercase opacity-80 tracking-widest mb-3">Tổng giờ T{currentDate.getMonth()+1}</h3>
-                            <div className="flex items-baseline gap-1.5">
-                                <span className="text-3xl font-extrabold tabular-nums leading-none">{myStats.total.toFixed(1)}</span>
-                                <span className="text-sm font-bold opacity-60">h</span>
-                            </div>
-                        </div>
-                        
-                        <Card className="p-6 border-none bg-white rounded-[1.5rem] shadow-sm flex items-center gap-5">
-                            <div className="p-4 bg-emerald-50 rounded-2xl text-emerald-600"><Check className="w-7 h-7"/></div>
-                            <div>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Đăng ký</p>
-                                <p className="text-2xl font-extrabold text-slate-900 tabular-nums">{myStats.count}</p>
-                            </div>
+                <div className="space-y-6 animate-fade-in-up">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                        <Card className={`${isTet ? 'bg-gradient-to-br from-red-700 to-red-900' : 'bg-gradient-to-br from-indigo-700 to-blue-900'} text-white border-none shadow-2xl rounded-[1.5rem] p-6`}>
+                            <h3 className="text-[10px] font-black uppercase opacity-80 tracking-widest text-white/90">Tổng giờ T{currentDate.getMonth()+1}</h3>
+                            <div className="flex items-end gap-1.5 mt-3"><span className="text-2xl md:text-4xl font-black tabular-nums">{myStats.total.toFixed(1)}</span><span className="text-xs font-bold opacity-70 mb-1.5">h</span></div>
                         </Card>
-
-                        <Card className="p-6 border-none bg-white rounded-[1.5rem] shadow-sm flex items-center gap-5">
-                            <div className="p-4 bg-amber-50 rounded-2xl text-amber-600"><Timer className="w-7 h-7"/></div>
-                            <div>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Đang chờ</p>
-                                <p className="text-2xl font-extrabold text-slate-900 tabular-nums">{myStats.pending}</p>
-                            </div>
+                        <Card className="bg-white border-l-[6px] border-emerald-600 rounded-[1.5rem] p-6 shadow-xl flex items-center gap-5">
+                            <div className="p-4 bg-emerald-100 rounded-2xl text-emerald-700 hidden sm:block"><Check className="w-8 h-8"/></div>
+                            <div><p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Ngày đăng ký</p><p className="text-2xl md:text-3xl font-black text-gray-900 tabular-nums">{myStats.count}</p></div>
                         </Card>
                     </div>
-
-                    <Card className="rounded-[2rem] p-6 md:p-8 shadow-sm border-none bg-white">
-                        <div className="flex justify-between items-center mb-8">
-                            <h4 className="text-lg font-extrabold text-slate-900 uppercase flex items-center gap-3"><Activity className="text-indigo-600" /> Biểu đồ hoạt động</h4>
+                    <Card className="rounded-[2.5rem] md:rounded-[3rem] p-6 md:p-12 shadow-xl border-none bg-white">
+                        <div className="mb-8">
+                            <h4 className="text-lg font-black text-gray-900 uppercase tracking-tight flex items-center gap-3"><Activity className="text-indigo-600" /> Biểu đồ hoạt động</h4>
                         </div>
-                        <div className="h-64 md:h-80 w-full">
+                        <div className="h-64 md:h-[450px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={myStats.trend}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 700, fill: '#94a3b8'}} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 700, fill: '#94a3b8'}} />
-                                    <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }} />
-                                    <Bar dataKey="hours" fill={isTet ? "#dc2626" : "#4f46e5"} radius={[4, 4, 0, 0]} barSize={14} />
+                                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 10, fontBold: 'bold', fill: '#94a3b8'}} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontBold: 'bold', fill: '#94a3b8'}} />
+                                    <Tooltip cursor={{fill: '#f8fafc'}} />
+                                    <Bar dataKey="hours" fill={isTet ? "#dc2626" : "#4f46e5"} radius={[4, 4, 0, 0]} barSize={12} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -485,128 +486,131 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
             )}
 
             {activeTab === 'stats' && (
-                <div className="space-y-6 animate-page-transition">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                        <Card className="bg-white p-6 border-none shadow-sm rounded-[1.5rem] flex items-center gap-5">
-                            <div className={`p-4 ${isTet ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'} rounded-2xl`}><Users className="w-7 h-7"/></div>
-                            <div>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Thành viên OT</p>
-                                <p className="text-2xl font-extrabold text-slate-900">{teamMonthlyStats.activeMembers}</p>
-                            </div>
+                <div className="space-y-6 animate-fade-in-up pb-10 bg-slate-100/50 p-2 md:p-4 rounded-[2rem] md:rounded-[3rem]">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+                        <Card className="bg-white p-5 border-none shadow-xl rounded-[1.5rem] flex items-center gap-5">
+                            <div className={`p-4 ${isTet ? 'bg-red-100 text-red-700' : 'bg-indigo-100 text-indigo-700'} rounded-[1.2rem]`}><Users className="w-8 h-8"/></div>
+                            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Thành viên OT</p><p className="text-xl md:text-3xl font-black text-gray-900">{teamMonthlyStats.activeMembers}</p></div>
                         </Card>
-                        <Card className="bg-white p-6 border-none shadow-sm rounded-[1.5rem] flex items-center gap-5">
-                            <div className={`p-4 bg-emerald-50 text-emerald-600 rounded-2xl`}><Timer className="w-7 h-7"/></div>
-                            <div>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Giờ nhóm</p>
-                                <p className="text-2xl font-extrabold text-slate-900">{teamMonthlyStats.totalHours.toFixed(1)}h</p>
-                            </div>
+                        <Card className="bg-white p-5 border-none shadow-xl rounded-[1.5rem] flex items-center gap-5">
+                            <div className={`p-4 bg-emerald-100 text-emerald-700 rounded-[1.2rem]`}><Timer className="w-8 h-8"/></div>
+                            <div><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tổng giờ nhóm</p><p className="text-xl md:text-3xl font-black text-gray-900">{teamMonthlyStats.totalHours.toFixed(1)}h</p></div>
                         </Card>
-                        <Card className={`${isTet ? 'bg-gradient-to-br from-red-600 to-red-800' : 'bg-gradient-to-br from-slate-800 to-slate-900'} text-white p-6 border-none shadow-lg rounded-[1.5rem] flex items-center gap-5`}>
-                            <div className="p-4 bg-white/10 rounded-2xl"><Target className="w-7 h-7 text-white"/></div>
+                        <Card className={`${isTet ? 'bg-gradient-to-br from-red-700 to-red-900' : 'bg-gradient-to-br from-indigo-700 to-indigo-950'} text-white p-5 border-none shadow-2xl rounded-[1.5rem] flex items-center gap-5 border-b-4 border-black/10`}>
+                            <div className="p-4 bg-white/20 rounded-[1.2rem] shadow-inner"><Target className="w-8 h-8 text-white"/></div>
                             <div>
-                                <p className="text-[10px] font-bold text-white/70 uppercase tracking-widest">Hôm nay</p>
-                                <p className="text-2xl font-extrabold text-white">{requests.filter(r => r.date === todayStr).length} NV</p>
+                                <p className="text-[10px] font-black text-white/90 uppercase tracking-widest drop-shadow-md">Hôm nay</p>
+                                <p className="text-xl md:text-3xl font-black text-white drop-shadow-lg">{requests.filter(r => r.date === todayStr).length} nhân sự</p>
                             </div>
                         </Card>
                     </div>
 
-                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-                        <div className="xl:col-span-8 space-y-5">
-                            <div className="bg-white rounded-[2rem] p-0 overflow-hidden shadow-sm border border-slate-200">
-                                <div className="p-6 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                                    <h4 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                                        Chi tiết đăng ký
-                                        <span className="px-2 py-0.5 bg-indigo-600 text-white text-[9px] rounded-full">
-                                            {targetedRegistrations.length} NV
-                                        </span>
-                                    </h4>
-                                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm w-full sm:w-auto">
-                                        <CalendarIcon className="w-4 h-4 text-slate-400" />
-                                        <input type="date" value={statsViewDate} onChange={(e) => setStatsViewDate(e.target.value)} className="bg-transparent text-xs font-bold outline-none text-slate-900 w-full"/>
+                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 md:gap-8">
+                        {/* Chi tiết đăng ký theo ngày */}
+                        <div className="xl:col-span-8 space-y-6">
+                            <Card className="rounded-[2rem] md:rounded-[2.5rem] p-0 overflow-hidden shadow-2xl border-none bg-white">
+                                <div className="p-6 md:p-8 bg-gray-50/80 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                    <div>
+                                        <h4 className="text-lg font-black text-gray-900 uppercase flex items-center gap-3 italic">
+                                            <Clock className="text-indigo-700 w-5 h-5"/> 
+                                            Danh sách chi tiết 
+                                            <span className="ml-2 px-2.5 py-1 bg-indigo-100 text-indigo-700 text-[10px] rounded-full normal-case not-italic font-black border border-indigo-200 shadow-sm">
+                                                {targetedRegistrations.length} người
+                                            </span>
+                                        </h4>
+                                        <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest mt-1">Dữ liệu ngày {statsViewDate.split('-').reverse().join('/')}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm w-full md:w-auto">
+                                        <CalendarIcon className="w-4 h-4 text-gray-400" />
+                                        <input type="date" value={statsViewDate} onChange={(e) => setStatsViewDate(e.target.value)} className="bg-transparent text-[11px] font-black outline-none uppercase cursor-pointer text-gray-900 w-full"/>
                                     </div>
                                 </div>
-                                <div className="p-5 space-y-3 max-h-[500px] overflow-y-auto no-scrollbar">
+                                <div className="p-4 md:p-6 space-y-3 overflow-y-auto max-h-[500px] no-scrollbar">
                                     {targetedRegistrations.length === 0 ? (
-                                        <div className="py-20 text-center flex flex-col items-center gap-3 opacity-40">
-                                            <Info className="w-8 h-8 text-slate-400"/>
-                                            <p className="font-bold uppercase text-[10px] tracking-widest text-slate-400">Không tìm thấy dữ liệu</p>
+                                        <div className="py-20 text-center flex flex-col items-center gap-4 opacity-30 grayscale">
+                                            <Info className="w-12 h-12 text-gray-900"/>
+                                            <p className="font-black uppercase text-[10px] tracking-[0.15em] text-gray-900">Không tìm thấy dữ liệu đăng ký</p>
                                         </div>
                                     ) : (
                                         targetedRegistrations.map((req, idx) => (
-                                            <div key={idx} className="p-4 rounded-2xl bg-white border border-slate-100 hover:border-indigo-100 transition-all flex items-center justify-between gap-4 group hover:shadow-sm">
+                                            <div key={idx} className="p-4 md:p-5 rounded-[1.5rem] bg-white border-2 border-gray-100 hover:border-indigo-200 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group shadow-sm hover:shadow-md">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="relative shrink-0">
-                                                        <div className={`w-12 h-12 text-white rounded-xl flex items-center justify-center font-extrabold text-lg shadow-md ${isTet ? 'bg-red-600' : 'bg-indigo-600'}`}>{req.users?.name?.charAt(0)}</div>
-                                                        <div className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-slate-900 text-white text-[8px] font-bold rounded-md flex items-center justify-center border border-white z-10">{idx + 1}</div>
+                                                    <div className="relative">
+                                                        <div className="absolute -top-2 -left-2 w-6 h-6 bg-gray-900 text-white text-[10px] font-black rounded-lg flex items-center justify-center border-2 border-white shadow-md z-10">
+                                                            {idx + 1}
+                                                        </div>
+                                                        <div className={`w-12 h-12 md:w-14 md:h-14 text-white rounded-[1.2rem] flex items-center justify-center font-black text-lg md:text-xl shadow-lg transition-transform group-hover:rotate-3 ${isTet ? 'bg-red-700' : 'bg-indigo-700'}`}>{req.users?.name?.charAt(0)}</div>
                                                     </div>
-                                                    <div className="min-w-0">
-                                                        <h5 className="font-extrabold text-slate-900 text-sm tracking-tight uppercase leading-none truncate">{req.users?.name}</h5>
-                                                        <div className="flex items-center gap-2 mt-2">
-                                                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{req.users?.employee_id}</span>
-                                                          <span className="text-[9px] font-bold text-indigo-600 uppercase px-2 py-0.5 bg-indigo-50 rounded-md">{req.start_time}-{req.end_time}</span>
+                                                    <div>
+                                                        <h5 className="font-black text-gray-900 text-sm md:text-base uppercase italic leading-none">{req.users?.name}</h5>
+                                                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                          <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest px-2 py-0.5 bg-gray-100 rounded-md border border-gray-200">{req.users?.employee_id}</span>
+                                                          <span className="text-[9px] font-black text-indigo-800 uppercase px-2 py-0.5 bg-indigo-50 rounded-md border border-indigo-200">{req.start_time} - {req.end_time}</span>
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="text-right shrink-0">
+                                                <div className="text-left sm:text-right w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100 flex sm:flex-col justify-between sm:justify-center items-center sm:items-end">
+                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest hidden sm:block">Giờ làm</p>
                                                     <div className="flex items-baseline gap-1">
-                                                      <span className="text-xl font-extrabold text-slate-900 tabular-nums">{req.total_hours.toFixed(1)}</span>
-                                                      <span className="text-[9px] font-bold text-slate-400 uppercase">H</span>
+                                                      <span className="text-xl md:text-2xl font-black text-gray-900 tabular-nums">{req.total_hours.toFixed(1)}</span>
+                                                      <span className="text-[10px] font-black text-gray-500 uppercase">H</span>
                                                     </div>
                                                 </div>
                                             </div>
                                         ))
                                     )}
                                 </div>
-                            </div>
+                            </Card>
                         </div>
 
-                        <div className="xl:col-span-4 space-y-6">
-                            <Card className="rounded-[2rem] p-0 overflow-hidden shadow-sm border border-slate-200 bg-white">
-                                <div className={`p-6 ${isTet ? 'bg-red-600' : 'bg-indigo-600'} text-white relative overflow-hidden`}>
-                                    <h4 className="text-base font-extrabold uppercase relative z-10 italic tracking-tight">Xếp hạng</h4>
-                                    <p className="text-[9px] font-bold opacity-70 uppercase tracking-widest mt-1 relative z-10">Tháng {currentDate.getMonth()+1}</p>
+                        <div className="xl:col-span-4 space-y-6 md:space-y-8">
+                            <Card className="rounded-[2rem] md:rounded-[2.5rem] p-0 overflow-hidden shadow-2xl border-none bg-white">
+                                <div className={`p-6 md:p-8 ${isTet ? 'bg-red-800' : 'bg-indigo-800'} text-white relative overflow-hidden`}>
+                                    <div className="absolute top-0 right-0 p-4 opacity-10"><Award className="w-24 h-24 rotate-12" /></div>
+                                    <h4 className="text-sm md:text-lg font-black uppercase flex items-center gap-3 italic relative z-10"><Award className="text-yellow-400 w-6 h-6" /> Bảng xếp hạng</h4>
+                                    <p className="text-[10px] font-black opacity-80 uppercase tracking-widest mt-1.5 relative z-10">Tháng {currentDate.getMonth()+1}</p>
                                 </div>
-                                <div className="p-5 space-y-3">
+                                <div className="p-4 md:p-6 space-y-3">
                                     {topRankings.map((emp, idx) => (
-                                        <div key={idx} className={`p-3.5 rounded-xl border flex items-center gap-4 transition-all ${idx === 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}>
-                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${idx === 0 ? 'bg-amber-400 text-white' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</div>
+                                        <div key={idx} className={`p-3 md:p-4 rounded-[1.2rem] border-2 flex items-center gap-4 transition-all ${idx === 0 ? 'bg-yellow-50/50 border-yellow-200 shadow-md scale-[1.02]' : 'bg-white border-gray-100 hover:border-indigo-100 shadow-sm'}`}>
+                                            <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center font-black text-xs md:text-sm shrink-0 shadow-md ${idx === 0 ? 'bg-yellow-500 text-white' : idx === 1 ? 'bg-slate-300 text-white' : idx === 2 ? 'bg-orange-300 text-white' : 'bg-gray-100 text-gray-500'}`}>{idx + 1}</div>
                                             <div className="flex-1 min-w-0">
-                                                <h5 className="font-bold text-slate-900 text-xs truncate uppercase tracking-tight">{emp.name}</h5>
-                                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{emp.count} buổi</p>
+                                                <h5 className="font-black text-gray-900 text-[11px] md:text-[13px] truncate uppercase">{emp.name}</h5>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase mt-0.5">{emp.count} ngày OT</p>
                                             </div>
                                             <div className="text-right">
-                                                <span className={`text-base font-extrabold ${idx === 0 ? 'text-amber-600' : 'text-slate-900'} tabular-nums`}>{emp.hours.toFixed(1)}</span>
-                                                <span className="text-[9px] font-bold text-slate-400 ml-0.5">h</span>
+                                                <span className={`text-base md:text-lg font-black ${idx === 0 ? 'text-yellow-700' : 'text-indigo-900'} tabular-nums`}>{emp.hours.toFixed(1)}</span>
+                                                <span className="text-[9px] font-black text-gray-400 ml-1 uppercase">h</span>
                                             </div>
                                         </div>
                                     ))}
+                                    {topRankings.length === 0 && (
+                                        <div className="py-10 text-center italic text-gray-300 text-xs font-bold uppercase tracking-widest">Chưa có dữ liệu tháng này</div>
+                                    )}
                                 </div>
                             </Card>
 
                             {isAdmin && (
-                                <div className="bg-slate-900 rounded-[2rem] p-6 shadow-lg space-y-6 text-white border border-slate-800">
+                                <Card className="rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 shadow-2xl border-none bg-gray-900 text-white space-y-6">
                                     <div className="flex items-center gap-4">
-                                        <div className="p-3 bg-white/10 rounded-xl"><FileSpreadsheet className="w-6 h-6 text-emerald-400"/></div>
-                                        <div>
-                                            <h4 className="font-extrabold uppercase text-sm leading-none">Báo cáo Excel</h4>
-                                            <p className="text-[9px] font-bold text-white/40 uppercase tracking-widest mt-1.5">Xuất dữ liệu chuẩn</p>
-                                        </div>
+                                        <div className="p-3 bg-white/10 rounded-[1rem]"><FileSpreadsheet className="w-6 h-6 text-emerald-400"/></div>
+                                        <div><h4 className="font-black uppercase italic text-sm">Báo cáo hệ thống</h4><p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">Xuất dữ liệu chuẩn Excel</p></div>
                                     </div>
-                                    <div className="space-y-3">
-                                        <button onClick={() => handleExportExcelPro('today')} className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-[10px] uppercase tracking-widest transition-all">XUẤT HÔM NAY</button>
-                                        <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-4">
+                                        <button onClick={() => handleExportExcelPro('today')} className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-[1.2rem] text-[10px] uppercase tracking-[0.2em] shadow-lg transition-all active:scale-95 border-b-4 border-emerald-900">XUẤT HÔM NAY</button>
+                                        <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-1.5">
-                                              <p className="text-[9px] font-bold text-white/50 uppercase ml-1">Từ ngày</p>
-                                              <input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="w-full bg-white/10 border-none rounded-lg p-2.5 text-[10px] font-bold text-white outline-none"/>
+                                              <p className="text-[9px] font-black text-emerald-400 uppercase tracking-[0.15em] ml-1">Từ ngày:</p>
+                                              <input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="w-full bg-white border-none rounded-xl p-3 text-[10px] font-black text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner"/>
                                             </div>
                                             <div className="space-y-1.5">
-                                              <p className="text-[9px] font-bold text-white/50 uppercase ml-1">Đến ngày</p>
-                                              <input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="w-full bg-white/10 border-none rounded-lg p-2.5 text-[10px] font-bold text-white outline-none"/>
+                                              <p className="text-[9px] font-black text-emerald-400 uppercase tracking-[0.15em] ml-1">Đến ngày:</p>
+                                              <input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="w-full bg-white border-none rounded-xl p-3 text-[10px] font-black text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner"/>
                                             </div>
                                         </div>
-                                        <button onClick={() => handleExportExcelPro('range')} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-[10px] uppercase tracking-widest transition-all">XUẤT DẢI NGÀY</button>
+                                        <button onClick={() => handleExportExcelPro('range')} className="w-full py-4 bg-indigo-700 hover:bg-indigo-800 text-white font-black rounded-[1.2rem] text-[10px] uppercase tracking-[0.2em] shadow-lg transition-all active:scale-95 border-b-4 border-indigo-950">XUẤT DÀI NGÀY</button>
                                     </div>
-                                </div>
+                                </Card>
                             )}
                         </div>
                     </div>
@@ -614,44 +618,46 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
             )}
         </div>
 
-        {/* MODAL ĐĂNG KÝ */}
+        {/* REGISTRATION MODAL */}
         {isModalOpen && (
-            <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-end md:items-center justify-center backdrop-blur-md animate-fade-in px-0 md:px-6">
-                <div className="bg-white rounded-t-[2.5rem] md:rounded-[3rem] shadow-2xl w-full max-w-2xl animate-zoom-in overflow-hidden max-h-[96vh] flex flex-col border border-white/20">
-                    <div className={`${isTet ? 'bg-gradient-to-r from-red-600 to-red-800' : 'bg-gradient-to-r from-indigo-600 to-purple-800'} p-6 md:p-8 flex justify-between items-center text-white shrink-0 shadow-lg`}>
-                        <div>
-                            <h3 className="text-xl md:text-2xl font-extrabold tracking-tight">Ghi nhận tăng ca</h3>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70 mt-1">Ngày {selectedDateStr.split('-').reverse().join('/')}</p>
+            <div className="fixed inset-0 bg-black/80 z-[100] flex items-end md:items-center justify-center backdrop-blur-md animate-fade-in px-0 md:px-4">
+                <div className="bg-white rounded-t-[2.5rem] md:rounded-[3rem] shadow-2xl w-full max-w-2xl animate-slide-up overflow-hidden max-h-[96vh] flex flex-col border border-white/20 shadow-[0_-20px_60px_rgba(0,0,0,0.4)]">
+                    <div className={`${isTet ? 'bg-gradient-to-r from-red-700 to-red-900' : 'bg-gradient-to-r from-indigo-700 to-blue-900'} p-6 md:p-8 flex justify-between items-center text-white shrink-0 shadow-2xl relative`}>
+                        <div className="flex flex-col relative z-10">
+                            <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter italic">Ghi nhận tăng ca</h3>
+                            <p className="text-[10px] md:text-sm font-black uppercase tracking-[0.2em] opacity-80 mt-1">Ngày {selectedDateStr.split('-').reverse().join('/')}</p>
                         </div>
-                        <button onClick={() => setIsModalOpen(false)} className="p-3 hover:bg-white/20 rounded-full transition-all active:scale-90"><X className="w-6 h-6"/></button>
+                        <button onClick={() => setIsModalOpen(false)} className="p-3 hover:bg-white/20 rounded-2xl transition-all active:scale-90"><X className="w-7 h-7 md:w-8 md:h-8"/></button>
                     </div>
                     
-                    <div className="p-6 md:p-10 space-y-8 overflow-y-auto no-scrollbar pb-20 bg-slate-50 flex-1">
+                    <div className="p-5 md:p-10 space-y-6 overflow-y-auto no-scrollbar pb-20 bg-gray-50 flex-1">
+                        
+                        {/* DANH SÁCH NHÂN VIÊN ĐÃ ĐĂNG KÝ TRONG NGÀY */}
                         <div className="space-y-4">
-                            <div className="flex items-center justify-between ml-1">
-                                <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Nhân sự trong ngày ({dayRequestsInModal.length})</h4>
-                                {isAdmin && <p className="text-[8px] font-bold text-indigo-500 uppercase italic">Click để sửa nhanh</p>}
+                            <div className="flex items-center justify-between px-2">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-500">Nhân sự đã đăng ký ({dayRequestsInModal.length})</h4>
+                                {dayRequestsInModal.length > 3 && (
+                                    <button onClick={() => setIsListExpanded(!isListExpanded)} className="text-[10px] font-black text-indigo-700 uppercase tracking-widest hover:underline">
+                                        {isListExpanded ? 'Thu gọn' : 'Xem tất cả'}
+                                    </button>
+                                )}
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 transition-all duration-300 ${!isListExpanded && dayRequestsInModal.length > 4 ? 'max-h-48 overflow-hidden' : ''}`}>
                                 {dayRequestsInModal.length === 0 ? (
-                                    <div className="col-span-full py-8 text-center bg-white/50 rounded-2xl border-2 border-dashed border-slate-200 text-[10px] font-bold text-slate-400 uppercase">Chưa có ai đăng ký</div>
+                                    <div className="col-span-full py-6 text-center bg-white rounded-2xl border-2 border-dashed border-gray-100 italic text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                        Chưa có nhân sự đăng ký trong ngày này
+                                    </div>
                                 ) : (
                                     dayRequestsInModal.map((r) => (
-                                        <div 
-                                            key={r.id} 
-                                            onClick={() => isAdmin && setTargetUserId(r.user_id)}
-                                            className={`flex items-center justify-between p-3.5 bg-white rounded-2xl border shadow-sm transition-all group 
-                                                ${isAdmin ? 'cursor-pointer hover:border-indigo-500 hover:shadow-md active:scale-95' : ''}
-                                                ${r.user_id === targetUserId ? 'ring-2 ring-indigo-500 border-indigo-100 bg-indigo-50/10' : 'border-slate-100'}`}
-                                        >
+                                        <div key={r.id} className={`flex items-center justify-between p-3 bg-white rounded-2xl border shadow-sm transition-all ${r.user_id === user.id ? (isTet ? 'border-red-200 bg-red-50/50' : 'border-indigo-200 bg-indigo-50/50') : 'border-gray-100'}`}>
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs text-white shadow-sm transition-transform group-hover:scale-110 ${isTet ? 'bg-red-600' : 'bg-indigo-600'}`}>{r.users?.name?.charAt(0)}</div>
-                                                <div className="flex flex-col">
-                                                    <p className={`text-xs font-bold uppercase truncate leading-none ${r.user_id === targetUserId ? 'text-indigo-600' : 'text-slate-900'}`}>{r.users?.name}</p>
-                                                    {isAdmin && r.user_id === targetUserId && <span className="text-[8px] font-black text-indigo-400 uppercase mt-1 flex items-center gap-1"><Edit className="w-2 h-2" /> Đang sửa</span>}
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs text-white shadow-md ${isTet ? 'bg-red-700' : 'bg-indigo-600'}`}>{r.users?.name?.charAt(0)}</div>
+                                                <div className="min-w-0">
+                                                    <p className="text-[11px] font-black uppercase text-gray-900 truncate leading-none mb-1">{r.users?.name}</p>
+                                                    <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tight">{r.start_time} - {r.end_time}</p>
                                                 </div>
                                             </div>
-                                            <div className={`text-[10px] font-bold px-2 py-0.5 rounded-lg transition-colors ${r.user_id === targetUserId ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{r.total_hours}h</div>
+                                            <div className={`text-[10px] font-black px-2 py-0.5 rounded-lg border-2 tabular-nums ${isTet ? 'text-red-700 border-red-200 bg-red-50' : 'text-indigo-700 border-indigo-200 bg-indigo-50'}`}>{r.total_hours}h</div>
                                         </div>
                                     ))
                                 )}
@@ -659,57 +665,62 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
                         </div>
 
                         {isAdmin && (
-                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
+                            <div className="bg-white p-5 rounded-[1.5rem] border-2 border-gray-100 shadow-lg space-y-4">
                                 <div className="flex items-center gap-3">
-                                    <Settings className="w-4 h-4 text-slate-400" />
-                                    <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-slate-900">Chế độ ngày công</h4>
+                                    <Settings className={`w-4 h-4 ${isTet ? 'text-red-700' : 'text-indigo-700'}`} />
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-900">Loại ngày công</h4>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <button onClick={() => updateDayWorkingStatus(false)} className={`py-4 rounded-xl border transition-all font-bold text-[10px] uppercase tracking-widest ${ (dayConfigs[selectedDateStr] === false || (dayConfigs[selectedDateStr] === undefined && (new Date(selectedDateStr).getDay() === 0 || new Date(selectedDateStr).getDay() === 6))) ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-400 border-slate-200 hover:border-rose-400' }`}>NGÀY NGHỈ</button>
-                                    <button onClick={() => updateDayWorkingStatus(true)} className={`py-4 rounded-xl border transition-all font-bold text-[10px] uppercase tracking-widest ${ (dayConfigs[selectedDateStr] === true || (dayConfigs[selectedDateStr] === undefined && new Date(selectedDateStr).getDay() !== 0 && new Date(selectedDateStr).getDay() !== 6)) ? (isTet ? 'bg-red-600 border-red-600 text-white' : 'bg-indigo-600 border-indigo-600 text-white') : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-400' }`}>NGÀY ĐI LÀM</button>
+                                    <button onClick={() => updateDayWorkingStatus(false)} className={`py-4 rounded-xl border-2 transition-all font-black text-[11px] uppercase tracking-widest shadow-sm ${ (dayConfigs[selectedDateStr] === false || (dayConfigs[selectedDateStr] === undefined && (new Date(selectedDateStr).getDay() === 0 || new Date(selectedDateStr).getDay() === 6))) ? 'bg-rose-700 text-white border-rose-700 shadow-rose-200/50' : 'bg-white text-gray-600 border-gray-100 hover:border-rose-200' }`}>NGÀY NGHỈ</button>
+                                    <button onClick={() => updateDayWorkingStatus(true)} className={`py-4 rounded-xl border-2 transition-all font-black text-[11px] uppercase tracking-widest shadow-sm ${ (dayConfigs[selectedDateStr] === true || (dayConfigs[selectedDateStr] === undefined && new Date(selectedDateStr).getDay() !== 0 && new Date(selectedDateStr).getDay() !== 6)) ? (isTet ? 'bg-red-700 border-red-700 text-white' : 'bg-indigo-700 border-indigo-700 text-white') : 'bg-white text-gray-600 border-gray-100 hover:border-indigo-200' }`}>NGÀY ĐI LÀM</button>
                                 </div>
                             </div>
                         )}
 
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-xl space-y-6">
+                            <div className="bg-white p-6 md:p-8 rounded-[2rem] border-2 border-gray-100 shadow-2xl space-y-6 relative overflow-hidden ring-1 ring-black/5">
                                 {isAdmin && (
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Nhân sự thực hiện</label>
-                                        <div className="relative">
-                                            <select required value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none uppercase appearance-none cursor-pointer focus:bg-white focus:border-indigo-500 transition-all text-slate-900">
-                                                {allEmployees.map(emp => (<option key={emp.id} value={emp.id}>{emp.name} • {emp.employee_id}</option>))}
+                                        <div className="flex justify-between items-center ml-1">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Nhân sự thực hiện:</label>
+                                            {editingRequestId && (
+                                                <span className="text-[9px] font-black text-amber-600 uppercase bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Đã có đăng ký - Chế độ Cập nhật</span>
+                                            )}
+                                        </div>
+                                        <div className="relative group">
+                                            <select required value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent rounded-xl text-[12px] font-black outline-none uppercase appearance-none cursor-pointer focus:bg-white focus:border-indigo-600 transition-all text-gray-900 shadow-inner">
+                                                {allEmployees.map(emp => (<option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_id})</option>))}
                                             </select>
-                                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                                         </div>
                                     </div>
                                 )}
 
                                 <div className="grid grid-cols-2 gap-4 md:gap-6">
                                     <div className="space-y-2">
-                                        <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Giờ bắt đầu</label>
-                                        <input type="time" required value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:bg-white focus:border-indigo-500 transition-all shadow-inner"/>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Bắt đầu:</label>
+                                        <input type="time" required value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-4 py-4 bg-gray-50 border-2 border-transparent rounded-xl text-sm font-black text-gray-900 outline-none focus:bg-white focus:border-indigo-600 transition-all shadow-inner"/>
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest ml-1">Giờ kết thúc</label>
-                                        <input type="time" required value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:bg-white focus:border-indigo-500 transition-all shadow-inner"/>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Kết thúc:</label>
+                                        <input type="time" required value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-4 py-4 bg-gray-50 border-2 border-transparent rounded-xl text-sm font-black text-gray-900 outline-none focus:bg-white focus:border-indigo-600 transition-all shadow-inner"/>
                                     </div>
                                 </div>
 
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center px-1">
-                                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Nội dung</label>
-                                        <div className={`text-[10px] font-black px-3 py-1 rounded-lg border shadow-sm ${isTet ? 'bg-red-50 text-red-600 border-red-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>{calculatedHours.toFixed(1)}h OT</div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Nội dung công việc:</label>
+                                        <span className={`text-[11px] font-black px-4 py-1 rounded-lg border-2 shadow-sm ${isTet ? 'bg-red-700 text-white border-red-700' : 'bg-indigo-700 text-white border-indigo-700'}`}>{calculatedHours.toFixed(1)}h OT</span>
                                     </div>
-                                    <textarea value={reason} onChange={(e) => setReason(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm md:text-base h-32 resize-none outline-none font-medium text-slate-900 focus:bg-white focus:border-indigo-500 transition-all shadow-inner" placeholder="VD: Bảo trì server, kiểm kho..."/>
+                                    <textarea value={reason} onChange={(e) => setReason(e.target.value)} className="w-full p-5 bg-gray-50 border-2 border-transparent rounded-[1.5rem] text-sm md:text-base h-32 resize-none outline-none font-bold text-gray-900 focus:bg-white focus:border-indigo-600 transition-all shadow-inner placeholder:text-gray-400" placeholder="VD: Sửa chữa thiết bị KHO A, kiểm kê hàng hóa..."/>
                                 </div>
 
-                                <div className="flex gap-4 pt-4">
+                                <div className="flex gap-4 pt-2">
                                     {editingRequestId && (isAdmin || targetUserId === user.id) && (
-                                        <button type="button" onClick={() => setIsConfirmCancelOpen(true)} className="p-5 bg-rose-50 text-rose-600 rounded-2xl hover:bg-rose-600 hover:text-white transition-all active:scale-90 border border-rose-100"><Trash2 className="w-6 h-6"/></button>
+                                        <button type="button" onClick={() => setIsConfirmCancelOpen(true)} className="p-5 bg-rose-700 text-white rounded-2xl shadow-lg active:scale-90"><Trash2 className="w-6 h-6"/></button>
                                     )}
-                                    <button type="submit" disabled={isSubmitting || calculatedHours <= 0} className={`flex-1 py-5 text-white font-bold rounded-2xl shadow-xl text-xs tracking-widest uppercase active:scale-[0.98] disabled:opacity-50 transition-all ${isTet ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
-                                        {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : (editingRequestId ? 'Lưu thay đổi' : 'Xác nhận đăng ký')}
+                                    <button type="submit" disabled={isSubmitting || calculatedHours <= 0} className={`flex-1 py-5 text-white font-black rounded-[1.5rem] shadow-2xl text-[11px] md:text-sm tracking-[0.2em] uppercase active:scale-95 disabled:opacity-50 transition-all border-b-4 ${isTet ? 'bg-red-700 border-red-900 shadow-red-200' : 'bg-indigo-700 border-indigo-950 shadow-indigo-200'}`}>
+                                        {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin mx-auto"/> : (editingRequestId ? 'CẬP NHẬT DỮ LIỆU' : 'XÁC NHẬN ĐĂNG KÝ')}
                                     </button>
                                 </div>
                             </div>
@@ -719,16 +730,16 @@ export const OvertimeRegistration: React.FC<OvertimeRegistrationProps> = ({ user
             </div>
         )}
 
-        {/* CONFIRMATION DELETE */}
+        {/* CONFIRMATION MODAL */}
         {isConfirmCancelOpen && (
-            <div className="fixed inset-0 bg-slate-900/90 z-[120] flex items-center justify-center p-6 backdrop-blur-xl animate-fade-in">
-                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden animate-zoom-in p-10 text-center border border-white/20">
-                    <div className="w-20 h-20 bg-rose-50 text-rose-600 mx-auto mb-6 rounded-3xl flex items-center justify-center shadow-md rotate-12"><Trash2 className="w-8 h-8" /></div>
-                    <h3 className="text-xl font-extrabold text-slate-900 mb-2 uppercase tracking-tight">Hủy bỏ?</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-10 px-2 leading-relaxed">Dữ liệu sẽ bị xóa vĩnh viễn khỏi kho lưu trữ hệ thống.</p>
+            <div className="fixed inset-0 bg-black/95 z-[120] flex items-center justify-center p-6 backdrop-blur-2xl animate-fade-in">
+                <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden animate-zoom-in p-10 text-center border-2 border-gray-100">
+                    <div className="w-20 h-20 bg-rose-700 text-white mx-auto mb-6 rounded-[1.5rem] flex items-center justify-center shadow-2xl rotate-12 transition-transform hover:rotate-0"><Trash2 className="w-10 h-10" /></div>
+                    <h3 className="text-2xl font-black text-gray-900 mb-2 uppercase italic leading-none">Hủy bỏ?</h3>
+                    <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-10 px-2 leading-relaxed">Dữ liệu đăng ký sẽ bị xóa vĩnh viễn khỏi hệ thống.</p>
                     <div className="flex flex-col gap-3">
-                        <button onClick={handleCancelRequest} disabled={isDeleting} className="w-full py-4 bg-rose-600 text-white font-bold rounded-xl text-[10px] uppercase tracking-widest shadow-lg shadow-rose-200 active:scale-95 transition-all">XÁC NHẬN XÓA</button>
-                        <button onClick={() => setIsConfirmCancelOpen(false)} className="w-full py-4 bg-slate-100 text-slate-500 font-bold rounded-xl text-[10px] uppercase tracking-widest active:scale-95 transition-all">QUAY LẠI</button>
+                        <button onClick={handleCancelRequest} disabled={isDeleting} className="w-full py-5 bg-rose-700 text-white font-black rounded-xl text-[11px] uppercase tracking-[0.2em] shadow-2xl active:scale-95">XÓA DỮ LIỆU</button>
+                        <button onClick={() => setIsConfirmCancelOpen(false)} className="w-full py-5 bg-gray-100 text-gray-700 font-black rounded-xl border-2 border-gray-200 text-[11px] uppercase tracking-[0.2em] active:scale-95">HỦY BỎ</button>
                     </div>
                 </div>
             </div>

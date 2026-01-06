@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { Tool, User } from '../../../types';
 import { Card } from '../ui/Card';
 import { 
-  Wrench, MapPin, Edit, Plus, X, LayoutGrid, List, Minus, Search, Send, Loader2, Save, Image as ImageIcon, ChevronLeft, ChevronRight, AlertTriangle, Settings2, Trash2, Check, Boxes, Info, Tag, Hash, Archive, Snowflake, Sparkles, Gift, Filter, Package, ShoppingCart
+  Wrench, MapPin, Edit, Plus, X, LayoutGrid, List, Minus, Search, Send, Loader2, Save, Image as ImageIcon, ChevronLeft, ChevronRight, AlertTriangle, Settings2, Trash2, Check, Boxes, Info, Tag, Hash, Archive, Snowflake, Sparkles, Gift, Filter, Package
 } from 'lucide-react';
 import { ThemeContext } from '../../../App';
 
@@ -198,6 +198,8 @@ export const ToolInventory: React.FC<ToolInventoryProps> = ({ user }) => {
         if (error) throw error;
       }
       
+      // Fixed Error in file src/components/tools/ToolInventory.tsx on line 263: Operator '+' cannot be applied to types 'unknown' and 'unknown'
+      // by ensuring totalSelectedCount is a number through explicit typing in its useMemo.
       setMessage(`Gửi thành công ${totalSelectedCount} yêu cầu mượn đồ!`);
       setSelectedQuantities({});
       window.dispatchEvent(new CustomEvent('refresh-counts'));
@@ -259,15 +261,10 @@ export const ToolInventory: React.FC<ToolInventoryProps> = ({ user }) => {
     }
   };
 
+  // Fixed: explicitly type sum and q to avoid 'unknown' type inference which causes compilation errors during template literal expansion
   const totalSelectedCount = useMemo(() => 
     Object.values(selectedQuantities).reduce((sum: number, q: number) => sum + q, 0)
   , [selectedQuantities]);
-
-  const selectedToolNames = useMemo(() => {
-    return Object.keys(selectedQuantities)
-      .map(id => tools.find(t => t.id === id)?.name)
-      .filter(Boolean);
-  }, [selectedQuantities, tools]);
 
   return (
     <div className="space-y-6 relative flex flex-col min-h-[calc(100vh-140px)] animate-fade-in max-w-[1600px] mx-auto w-full pb-36">
@@ -440,19 +437,19 @@ export const ToolInventory: React.FC<ToolInventoryProps> = ({ user }) => {
                         <span className="truncate">{tool.location || 'Văn phòng V1'}</span>
                       </div>
                       
-                      {/* Quantity Selector for User Mode - GRID */}
+                      {/* Quantity Selector for User Mode */}
                       {!isManageMode && isSelected && isAvailable && (
-                        <div className={`flex items-center justify-between p-2 mt-2 rounded-xl border ${isTet || isNoel ? 'bg-red-50 border-red-100' : 'bg-indigo-50 border-indigo-100 shadow-inner'}`}>
+                        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                            <button 
                              onClick={(e) => updateQuantitySelection(tool.id, -1, tool.available, e)}
-                             className={`p-2 rounded-lg transition-all ${isTet || isNoel ? 'bg-white text-red-600 hover:bg-red-600 hover:text-white' : 'bg-white text-indigo-600 hover:bg-indigo-600 hover:text-white shadow-sm'}`}
+                             className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
                            >
                              <Minus className="w-4 h-4" />
                            </button>
-                           <span className={`text-base font-black tabular-nums ${isTet || isNoel ? 'text-red-900' : 'text-indigo-900'}`}>{qty}</span>
+                           <span className="text-sm font-black tabular-nums">{qty}</span>
                            <button 
                              onClick={(e) => updateQuantitySelection(tool.id, 1, tool.available, e)}
-                             className={`p-2 rounded-lg transition-all ${isTet || isNoel ? 'bg-white text-red-600 hover:bg-red-600 hover:text-white' : 'bg-white text-indigo-600 hover:bg-indigo-600 hover:text-white shadow-sm'}`}
+                             className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
                            >
                              <Plus className="w-4 h-4" />
                            </button>
@@ -482,7 +479,6 @@ export const ToolInventory: React.FC<ToolInventoryProps> = ({ user }) => {
                 <tbody className="divide-y divide-gray-50">
                   {currentTools.map((tool) => {
                     const isSelected = !!selectedQuantities[tool.id];
-                    const qty = selectedQuantities[tool.id] || 0;
                     const isAvailable = tool.status === 'active' && tool.available > 0;
                     
                     return (
@@ -518,34 +514,15 @@ export const ToolInventory: React.FC<ToolInventoryProps> = ({ user }) => {
                           </span>
                         </td>
                         <td className="px-8 py-4 text-right">
-                          <div className="flex justify-end items-center gap-3">
+                          <div className="flex justify-end gap-2">
                              {isManageMode ? (
-                               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                 <button onClick={(e) => { e.stopPropagation(); handleEditTool(tool); }} className="p-2.5 bg-gray-50 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm"><Edit className="w-4 h-4"/></button>
-                                 <button onClick={(e) => { e.stopPropagation(); setToolToDelete(tool); }} className="p-2.5 bg-gray-50 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shadow-sm"><Trash2 className="w-4 h-4"/></button>
-                               </div>
+                               <>
+                                 <button onClick={(e) => { e.stopPropagation(); handleEditTool(tool); }} className="p-2.5 bg-gray-50 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Edit className="w-4 h-4"/></button>
+                                 <button onClick={(e) => { e.stopPropagation(); setToolToDelete(tool); }} className="p-2.5 bg-gray-50 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 className="w-4 h-4"/></button>
+                               </>
                              ) : (
-                               <div className="flex items-center gap-3">
-                                 {isSelected && isAvailable && (
-                                   <div className={`flex items-center gap-3 px-3 py-1.5 rounded-xl border animate-fade-in ${isTet || isNoel ? 'bg-white border-red-100' : 'bg-white border-indigo-100 shadow-sm'}`}>
-                                      <button 
-                                        onClick={(e) => updateQuantitySelection(tool.id, -1, tool.available, e)}
-                                        className={`p-1 rounded-lg transition-all ${isTet || isNoel ? 'text-red-600 hover:bg-red-50' : 'text-indigo-600 hover:bg-indigo-50'}`}
-                                      >
-                                        <Minus className="w-4 h-4" />
-                                      </button>
-                                      <span className="text-xs font-black tabular-nums min-w-[20px] text-center">{qty}</span>
-                                      <button 
-                                        onClick={(e) => updateQuantitySelection(tool.id, 1, tool.available, e)}
-                                        className={`p-1 rounded-lg transition-all ${isTet || isNoel ? 'text-red-600 hover:bg-red-50' : 'text-indigo-600 hover:bg-indigo-50'}`}
-                                      >
-                                        <Plus className="w-4 h-4" />
-                                      </button>
-                                   </div>
-                                 )}
-                                 <div className={`p-2.5 rounded-xl transition-all shadow-sm ${isSelected ? (isTet || isNoel ? 'bg-red-700 text-white' : 'bg-indigo-600 text-white') : 'bg-gray-50 text-gray-300 group-hover:bg-gray-100'}`}>
-                                   <Check className="w-5 h-5" />
-                                 </div>
+                               <div className={`p-2 rounded-xl transition-all ${isSelected ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-300'}`}>
+                                 <Check className="w-5 h-5" />
                                </div>
                              )}
                           </div>
@@ -562,30 +539,28 @@ export const ToolInventory: React.FC<ToolInventoryProps> = ({ user }) => {
 
       {/* Action Bar Floating (Bottom) */}
       {!isManageMode && totalSelectedCount > 0 && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[999] w-[calc(100%-2rem)] max-w-4xl pointer-events-none animate-fade-in-up">
-            <div className={`pointer-events-auto backdrop-blur-2xl border-2 border-white/30 p-2 md:p-3 rounded-[2.5rem] md:rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.5)] flex items-center justify-between gap-4 bg-gray-900 transition-all duration-500 ring-4 ring-black/5`}>
-                <div className="flex items-center gap-4 pl-4 overflow-hidden">
-                    <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center text-white font-black text-xl md:text-3xl border-4 border-white/20 shadow-2xl shrink-0 bg-gradient-to-br transition-colors duration-500 ${isTet || isNoel ? 'from-red-600 to-red-800' : 'from-indigo-600 to-indigo-800'} animate-pulse`}>
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[999] w-[calc(100%-2rem)] max-w-3xl pointer-events-none animate-fade-in-up">
+            <div className={`pointer-events-auto backdrop-blur-2xl border-2 border-white/30 p-2 md:p-3 rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.5)] flex items-center justify-between gap-4 bg-gray-900 transition-all duration-500 ring-2 ring-indigo-500/20`}>
+                <div className="flex items-center gap-4 pl-4">
+                    <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center text-white font-black text-xl md:text-3xl border-4 border-white/20 shadow-2xl shrink-0 bg-gradient-to-br from-indigo-600 to-indigo-800 animate-pulse`}>
                       {totalSelectedCount}
                     </div>
-                    <div className="hidden sm:flex flex-col min-w-0">
-                        <p className="text-white font-black text-xs md:text-base uppercase tracking-tight leading-tight italic drop-shadow-sm truncate">
-                          {selectedToolNames.length <= 2 ? selectedToolNames.join(', ') : `${selectedToolNames.slice(0, 2).join(', ')} và ${selectedToolNames.length - 2} khác`}
-                        </p>
-                        <p className="text-emerald-400 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] mt-0.5">Sẵn sàng mượn đồ</p>
+                    <div className="hidden sm:flex flex-col">
+                        <p className="text-white font-black text-xs md:text-base uppercase tracking-tight leading-tight italic drop-shadow-sm">Thiết bị chọn</p>
+                        <p className="text-emerald-400 text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] mt-0.5">Xác nhận để mượn đồ</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 md:gap-3 pr-2 shrink-0">
+                <div className="flex items-center gap-3 pr-2">
                     <button 
                       onClick={() => setSelectedQuantities({})} 
                       className="px-4 py-2 text-white/60 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all hover:bg-white/10 rounded-full"
                     >
-                      HỦY
+                      HỦY BỎ
                     </button>
                     <button 
                       onClick={handleBulkBorrow} 
                       disabled={isBorrowing} 
-                      className={`text-white px-8 md:px-12 py-4 md:py-5 rounded-[2rem] md:rounded-full text-[11px] md:text-sm font-black uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 transition-all border-b-4 ${isTet || isNoel ? 'bg-red-700 hover:bg-red-600 border-red-900 shadow-red-500/30' : 'bg-indigo-700 hover:bg-indigo-600 border-indigo-900 shadow-indigo-500/30'}`}
+                      className={`text-white px-8 md:px-12 py-4 md:py-5 rounded-full text-[11px] md:text-sm font-black uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 transition-all bg-indigo-700 hover:bg-indigo-600 border-b-4 border-indigo-900 shadow-indigo-500/30`}
                     >
                         {isBorrowing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-4 h-4 md:w-6 md:h-6" /> GỬI YÊU CẦU</>}
                     </button>
@@ -597,8 +572,7 @@ export const ToolInventory: React.FC<ToolInventoryProps> = ({ user }) => {
       {/* Pagination Footer */}
       {filteredTools.length > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-xl border border-gray-100">
-           <div className="text-[10px] md:text-[12px] text-gray-500 font-black uppercase tracking-widest flex items-center gap-2">
-             <div className={`w-2 h-2 rounded-full ${isTet || isNoel ? 'bg-red-600' : 'bg-indigo-600'}`}></div>
+           <div className="text-[10px] md:text-[12px] text-gray-500 font-black uppercase tracking-widest">
              Hiển thị <span className="text-gray-900">{startIndex + 1}-{Math.min(filteredTools.length, startIndex + pageSize)}</span> trên {filteredTools.length} thiết bị
            </div>
            
