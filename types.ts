@@ -64,3 +64,15 @@ export interface DayConfig {
   date: string; // YYYY-MM-DD
   is_working_day: boolean; // true = Đi làm, false = Nghỉ
 }
+
+export interface DutyGroup {
+  id: string;
+  name: string;
+  member_ids: string[];
+}
+
+export interface DutySchedule {
+  date: string;
+  group_id: string;
+  notes?: string;
+}

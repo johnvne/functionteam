@@ -1,9 +1,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Sử dụng biến môi trường cho việc deploy, fallback về giá trị cũ nếu chưa set
-const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://duqqsdyaqxaipewfgqdg.supabase.co';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1cXFzZHlhcXhhaXBld2ZncWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwMjA4NjQsImV4cCI6MjA3ODU5Njg2NH0.CGXbzy8J5qOq-HiJSuBHXABxqnCqggUyYWsH528J0fU';
+const supabaseUrl = 'https://duqqsdyaqxaipewfgqdg.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1cXFzZHlhcXhhaXBld2ZncWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwMjA4NjQsImV4cCI6MjA3ODU5Njg2NH0.CGXbzy8J5qOq-HiJSuBHXABxqnCqggUyYWsH528J0fU';
 
 const client = createClient(supabaseUrl, supabaseKey);
 
@@ -42,6 +41,7 @@ export const supabase = {
       }
     },
     signOut: async () => {
+      localStorage.removeItem('sb-session');
       return { error: null };
     },
     getSession: async () => {
