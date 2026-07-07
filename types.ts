@@ -63,6 +63,7 @@ export interface OvertimeRequest {
 export interface DayConfig {
   date: string; // YYYY-MM-DD
   is_working_day: boolean; // true = Đi làm, false = Nghỉ
+<<<<<<< HEAD
 }
 
 export interface DutyGroup {
@@ -75,4 +76,6 @@ export interface DutySchedule {
   date: string;
   group_id: string;
   notes?: string;
+=======
+>>>>>>> 6a4ea0e1836a66b5fbfad6a51d951a307b2cb7b9
 }

@@ -1,4 +1,5 @@
 
+<<<<<<< HEAD
 import React, { useState, useMemo, useContext } from 'react';
 import { supabase } from '../../lib/supabase';
 import { 
@@ -7,12 +8,18 @@ import {
   Palette, Sun, Snowflake, Info
 } from 'lucide-react';
 import { ThemeContext } from '../../../App';
+=======
+import React, { useState } from 'react';
+import { supabase } from '../../lib/supabase';
+import { LucideLoader2, UserCircle, ShieldCheck, Lock, AlertCircle } from 'lucide-react';
+>>>>>>> 6a4ea0e1836a66b5fbfad6a51d951a307b2cb7b9
 
 interface LoginFormProps {
   onLoginSuccess: (user: any) => void;
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
+<<<<<<< HEAD
   const { theme, setTheme } = useContext(ThemeContext);
   const [employeeCode, setEmployeeCode] = useState('');
   const [password, setPassword] = useState('');
@@ -65,18 +72,35 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
       checkColor: 'bg-indigo-600'
     };
   }, [theme]);
+=======
+  const [employeeCode, setEmployeeCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+>>>>>>> 6a4ea0e1836a66b5fbfad6a51d951a307b2cb7b9
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 6a4ea0e1836a66b5fbfad6a51d951a307b2cb7b9
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         employeeCode,
         password,
       });
+<<<<<<< HEAD
       if (error) setError(error.message);
       else if (data?.user) {
+=======
+
+      if (error) {
+        setError(error.message);
+      } else if (data?.user) {
+>>>>>>> 6a4ea0e1836a66b5fbfad6a51d951a307b2cb7b9
         localStorage.setItem('sb-session', JSON.stringify(data.session));
         onLoginSuccess(data.user);
       }
@@ -88,6 +112,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   };
 
   return (
+<<<<<<< HEAD
     <div className={`min-h-screen ${festiveConfig.bg} flex items-center justify-center p-4 transition-all duration-1000 relative overflow-hidden`}>
       {/* Dynamic Background Elements */}
       <div className={`absolute inset-0 bg-gradient-to-br ${festiveConfig.gradient}`}></div>
@@ -217,6 +242,65 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
             <p className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Powered by V1 Platform</p>
           </div>
           <p className={`text-[8px] font-black uppercase tracking-[0.5em] ${festiveConfig.mutedText}`}>EST. 2025 • ENTERPRISE</p>
+=======
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="p-10 text-center">
+          <div className="mx-auto bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-200">
+            <ShieldCheck className="text-white w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Manager Tool</h2>
+          <p className="text-sm text-gray-500 mt-2">Hệ thống quản lý công cụ & nhân sự</p>
+        </div>
+
+        <div className="px-10 pb-10">
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600 ml-1">Mã nhân viên</label>
+              <div className="relative">
+                <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  value={employeeCode}
+                  onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())}
+                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-transparent rounded-xl text-sm font-medium focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                  placeholder="Nhập mã nhân viên"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600 ml-1">Mật khẩu</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-transparent rounded-xl text-sm font-medium focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="p-4 bg-red-50 text-red-600 text-xs font-medium rounded-xl border border-red-100 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? <LucideLoader2 className="w-5 h-5 animate-spin" /> : 'Đăng nhập'}
+            </button>
+          </form>
+>>>>>>> 6a4ea0e1836a66b5fbfad6a51d951a307b2cb7b9
         </div>
       </div>
     </div>

@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 
+=======
+>>>>>>> 6a4ea0e1836a66b5fbfad6a51d951a307b2cb7b9
 import React from 'react';
 
 interface CardProps {
@@ -6,6 +9,7 @@ interface CardProps {
   className?: string;
   title?: string;
   onClick?: () => void;
+<<<<<<< HEAD
   noPadding?: boolean;
 }
 
@@ -31,3 +35,18 @@ export const Card: React.FC<CardProps> = ({ children, className = '', title, onC
     </div>
   );
 };
+=======
+}
+
+export const Card: React.FC<CardProps> = ({ children, className = '', title, onClick }) => {
+  return (
+    <div 
+      className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 ${className}`}
+      onClick={onClick}
+    >
+      {title && <h3 className="text-lg font-semibold text-gray-800 mb-4">{title}</h3>}
+      {children}
+    </div>
+  );
+};
+>>>>>>> 6a4ea0e1836a66b5fbfad6a51d951a307b2cb7b9

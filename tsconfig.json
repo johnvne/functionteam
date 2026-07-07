@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 {
   "compilerOptions": {
@@ -20,3 +21,34 @@
   },
   "include": ["index.tsx", "vite.config.ts", "types.ts", "src/**/*"]
 }
+=======
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  }
+}
+>>>>>>> 6a4ea0e1836a66b5fbfad6a51d951a307b2cb7b9
