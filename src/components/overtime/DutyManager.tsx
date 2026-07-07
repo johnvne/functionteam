@@ -1069,7 +1069,7 @@ export const DutyManager: React.FC<DutyManagerProps> = ({
                     </div>
                     {sheetInfo && (
                       <span className="bg-slate-100 text-slate-500 text-[10px] font-black px-2.5 py-1 rounded-lg">
-                        {sheetInfo.rowCount} Dòng x {sheetInfo.colCount} Cột
+                        {sheetInfo?.rowCount} Dòng x {sheetInfo?.colCount} Cột
                       </span>
                     )}
                   </div>
@@ -1083,13 +1083,13 @@ export const DutyManager: React.FC<DutyManagerProps> = ({
                       <table className="w-full text-left border-collapse text-[11px]">
                         <thead>
                           <tr className="bg-slate-50 text-slate-500 font-black uppercase border-b border-slate-100">
-                            {parsedPreviewRows[0]?.map((col, idx) => (
+                            {parsedPreviewRows?.[0]?.map((col, idx) => (
                               <th key={idx} className="px-4 py-3">{String(col || `Cột ${idx + 1}`)}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {parsedPreviewRows.slice(1, 6).map((row, rIdx) => (
+                          {parsedPreviewRows?.slice(1, 6).map((row, rIdx) => (
                             <tr key={rIdx} className="border-b border-slate-50 hover:bg-slate-50/50">
                               {row.map((cell, cIdx) => (
                                 <td key={cIdx} className="px-4 py-2.5 font-medium text-slate-600">{String(cell || '')}</td>
